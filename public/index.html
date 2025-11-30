@@ -326,8 +326,8 @@
         switch(chgState) {
             case 0: return{text:"Standby",color:"text-gray-400"};
             case 1: return{text:"Float",color:"text-solar-500"};
-            case 2: return{text:"Boost",color:"text-blue-500"};
-            case 3: return{text:"Equalize",color:"text-orange-500"};
+            case 2: return{text:"Boost",color:"text-orange-500"};
+            case 3: return{text:"Equalize",color:"text-blue-500"};
             default: return{text:"Active",color:"text-green-500"};
         }
     }
@@ -384,7 +384,7 @@
                 const dateObj = new Date(log.hStamp * 1000);
                 const timeStr = dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                 const statusStr = getStatusLabel(log.hCCode); // Decode 'hCCode' from DB
-                const statusStrEL = `<span class="px-2 py-1 rounded text-xs font-bold ${statusStr.color.replace('text-','bg-')}">${statusStr.text}</span>`;
+                const statusStrEL = `<span class="px-2 py-1 rounded text-xs font-bold bg-gray-100 ${statusStr.color}">${statusStr.text}</span>`;
                 fetchedLogData.push({ time: timeStr, ...log }); 
 
                 html += `<tr class="hover:bg-gray-50 dark:hover:bg-slate-800">
