@@ -14,6 +14,8 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    
+    <script src="fbConfig.js"> // --- FIREBASE CONFIG --- </script>
 
     <script>
         tailwind.config = {
@@ -207,8 +209,6 @@
             </div>
         </div>
     </div>
-
-<script src="fbConfig.js"> // --- FIREBASE CONFIG --- </script>
 <script>
     /*
     document.getElementById('upload-dropzone')?.addEventListener('drop', (e) => {
@@ -227,12 +227,21 @@
             }
         }
     });*/
-    
 
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
     const storage = firebase.storage();
     const auth = firebase.auth();
+
+    let isConnectionActive = false; // Prevents double-starting listeners
+    let idleTimer = null;           // Holds the countdown
+    const IDLE_TIMEOUT = 60000;     // 1 minute in milliseconds
+
+    const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];   // Events that count as "Activity"
+    activityEvents.forEach(event => {
+        document.addEventListener(event, resetIdleTimer, { passive: true });                // Attach activity listeners
+    });
+    resetIdleTimer();   // Start on load
 
     let liveChartInstance = null;
     let dayChartInstance = null;
@@ -256,6 +265,42 @@
         dropzone.addEventListener('drop', handleDrop);
     });
 
+    // --- IDLE & VISIBILITY LOGIC ---
+    function resetIdleTimer() {
+        // 1. Clear existing timer
+        if (idleTimer) clearTimeout(idleTimer);
+
+        // 2. If we were paused/stopped and the tab is visible, wake up!
+        if (!isConnectionActive && !document.hidden) {
+            startFirebaseListener();
+        }
+
+        // 3. Set new timer: If no activity for 60s, Stop.
+        idleTimer = setTimeout(() => {
+            if (!document.hidden) { // Only log if we are looking at it
+                console.log("User inactive for 1 min. Disconnecting.");
+            }
+            stopFirebaseListener();
+        }, IDLE_TIMEOUT);
+    }
+
+    // Handle Tab Switching / Minimize
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden) {
+            // Immediately kill connection when tab is hidden
+            stopFirebaseListener(); 
+        } else {
+            // Immediately restore connection when tab comes back
+            startFirebaseListener();
+            resetIdleTimer();
+        }
+    });
+    
+    // Safety net: Ensures disconnection if the user closes the window/tab directly
+    window.addEventListener("pagehide", () => {
+        stopFirebaseListener();
+    });
+
     function switchView(id) {
         document.getElementById('view-dashboard').className = id==='dashboard'?'fade-in space-y-6':'hidden-view';
         document.getElementById('view-history').className = id==='history'?'fade-in space-y-6':'hidden-view';
@@ -274,15 +319,44 @@
     }
 
     function startFirebaseListener() {
+        // Prevent double connections
+        if (isConnectionActive) return;
+
+        console.log("Starting Connection...");
+        firebase.database().goOnline(); // Ensure socket is open
+
         const statusEl = document.getElementById('connection-status');
         const dotEl = document.getElementById('conn-dot');
         
         db.ref('epever/live').on('value', (snapshot) => {
             const data = snapshot.val();
             if (!data) return;
-            statusEl.textContent = "Firebase Connected"; dotEl.className = "inline-block w-2 h-2 rounded-full bg-solar-500 animate-pulse";
+
+            // Update UI only if we are actually connected
+            statusEl.textContent = "Firebase Connected";
+            dotEl.className = "inline-block w-2 h-2 rounded-full bg-solar-500 animate-pulse";
             updateUI(data);
         });
+        isConnectionActive = true;
+    }
+
+    function stopFirebaseListener() {
+        if (!isConnectionActive) return;
+
+        console.log("Stopping Connection (Idle/Background)...");
+
+        // 1. Remove listeners to stop callbacks
+        db.ref('epever/live').off();
+
+        // 2. Kill the WebSocket to save bandwidth/battery immediately
+        firebase.database().goOffline();
+
+        const statusEl = document.getElementById('connection-status');
+        const dotEl = document.getElementById('conn-dot');
+        statusEl.textContent = "Paused (Idle)"; 
+        dotEl.className = "inline-block w-2 h-2 rounded-full bg-yellow-500";
+
+        isConnectionActive = false;
     }
 
     function updateUI(data) {
@@ -458,6 +532,10 @@
         if (e.dataTransfer.files.length && e.dataTransfer.files[0].name.endsWith('.bin')) {
             selectedFile = e.dataTransfer.files[0];
             document.getElementById('fw-message').textContent = `Selected: ${selectedFile.name}`;
+            document.getElementById('fw-message').className = 'text-xs text-center text-green-600 dark:text-green-400';
+        } else {
+            document.getElementById('fw-message').textContent = 'Please drop a .bin file';
+            document.getElementById('fw-message').className = 'text-xs text-center text-red-600';
         }
     }
 
