@@ -516,8 +516,8 @@
         const dateInput = document.getElementById('logDateSelector').value;
         if(!dateInput) return alert("Select a date");
 
-        const startTs = new Date(dateInput).getTime() / 1000;
-        const endTs = startTs + 86400;
+        const startTs = new Date(dateInput).getTime() / 1000;       // Start of selected day in seconds
+        const endTs = startTs + 86400;                              // End of selected day in seconds
 
         const tbody = document.getElementById('detail-table-body');
         tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center">Loading...</td></tr>';
@@ -536,11 +536,11 @@
             let chartLabels = [];
             let chartData = [];
 
-            const logs = Object.values( data).sort((a,b) => a.ts - b.ts);
+            const logs = Object.values( data).sort((a,b) => b.ts - a.ts);    // Sort descending by timestamp
 
             logs.forEach(log => {
-                const dateObj = new Date(log.hStamp * 1000);
-                const timeStr = dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                const dateObj = new Date(log.hStamp * 1000);    // Convert to milliseconds
+                const timeStr = dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); // Format HH:MM
                 const statusStr = getStatusLabel(log.hCCode); // Decode 'hCCode' from DB
                 const statusStrEL = `<span class="px-2 py-1 rounded text-xs font-bold bg-gray-100 ${statusStr.color}">${statusStr.text}</span>`;
                 fetchedLogData.push({ time: timeStr, ...log }); 
