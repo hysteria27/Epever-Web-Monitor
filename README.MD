@@ -51,7 +51,7 @@ Create a `config.h` file in the Arduino project directory with the following cre
 #define RS485_DE_RE_PIN 4 
 ```
 ## 2. Web Dashboard Setup
-Create a fbConfig.js file in the public/ folder:
+Create a `fbConfig.js` file in the public/ folder:
 ```javascript
 const firebaseConfig = {
   apiKey: "YOUR_API_KEY",
