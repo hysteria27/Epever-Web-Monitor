@@ -17,7 +17,7 @@ FirebaseConfig config;
 ModbusMaster node;
 
 // --- FIRMWARE INFO ---
-const char* FIRMWARE_VERSION = "1.0.4"; // Bumped version
+const char* FIRMWARE_VERSION = "1.0.5";
 const char* NTP_SERVER = "pool.ntp.org";
 const long  GMT_OFFSET_SEC = 25200; // WIB (UTC+7) = 7 * 3600
 const int   DAYLIGHT_OFFSET_SEC = 0;
@@ -87,7 +87,7 @@ void setup() {
   fbOTA.setBSSLBufferSize(4096, 1024);  
   fbOTA.setResponseSize(2048);
 
-  if (Firebase.signUp(&config, &auth, "", "")) {
+  if (Firebase.signUp(&config, &auth, USER_EMAIL, USER_PASSWORD)) {
     Serial.println("Firebase Auth OK");
   }
   

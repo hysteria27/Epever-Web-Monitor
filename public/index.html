@@ -257,6 +257,44 @@
         }
     });*/
 
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const storage = firebase.storage();
+    const auth = firebase.auth();
+
+    let isAuthenticated = false;    // User authentication state
+    let isConnectionActive = false; // Prevents double-starting listeners
+    let idleTimer = null;           // Holds the countdown
+    const IDLE_TIMEOUT = 60000;     // 1 minute in milliseconds
+
+    const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];   // Events that count as "Activity"
+    activityEvents.forEach(event => {
+        document.addEventListener(event, resetIdleTimer, { passive: true });                // Attach activity listeners
+    });
+    // resetIdleTimer();   // Start on load
+
+    let liveChartInstance = null;
+    let dayChartInstance = null;
+    let livePVData = Array(30).fill(0);
+    let liveLabels = Array(30).fill('');
+    let fetchedLogData = [];
+
+    window.addEventListener('load', () => {
+        lucide.createIcons();
+        initCharts();
+        // auth.signInAnonymously().catch(console.error);
+        // startFirebaseListener();
+        
+        document.getElementById('logDateSelector').valueAsDate = new Date(); // Set to today by default
+        
+        // Setup Drag & Drop
+        const dropzone = document.getElementById('upload-dropzone');
+        dropzone.addEventListener('click', () => document.getElementById('fw-file-input').click());
+        dropzone.addEventListener('dragover', (e) => { e.preventDefault(); e.currentTarget.classList.add('bg-gray-100'); });
+        dropzone.addEventListener('dragleave', (e) => { e.currentTarget.classList.remove('bg-gray-100'); });
+        dropzone.addEventListener('drop', handleDrop);
+    });
+
     // --- AUTH LOGIC ---
     auth.onAuthStateChanged((user) => {
         if (user) {
@@ -265,11 +303,13 @@
             document.getElementById('view-app').classList.remove('hidden-view');
             document.getElementById('view-app').classList.add('flex');
             startFirebaseListener();
+            isAuthenticated = true;
         } else {
             // User Logout -> Balik ke Login
             document.getElementById('view-login').classList.remove('hidden-view');
             document.getElementById('view-app').classList.add('hidden-view');
             document.getElementById('view-app').classList.remove('flex');
+            document.getElementById('login-btn-text').textContent = "Sign In";
             stopFirebaseListener();
         }
     });
@@ -277,6 +317,12 @@
     function doLogin() {
         const email = document.getElementById('login-email').value;
         const pass = document.getElementById('login-pass').value;
+
+        if (!email || !pass) {
+            alert("Email dan Password tidak boleh kosong");
+            return;
+        }
+
         const btn = document.getElementById('login-btn-text');
         const err = document.getElementById('login-error');
         
@@ -293,47 +339,13 @@
 
     function doLogout() {
         auth.signOut();
+        isAuthenticated = false;
     }
-
-    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-    const storage = firebase.storage();
-    const auth = firebase.auth();
-
-    let isConnectionActive = false; // Prevents double-starting listeners
-    let idleTimer = null;           // Holds the countdown
-    const IDLE_TIMEOUT = 60000;     // 1 minute in milliseconds
-
-    const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];   // Events that count as "Activity"
-    activityEvents.forEach(event => {
-        document.addEventListener(event, resetIdleTimer, { passive: true });                // Attach activity listeners
-    });
-    resetIdleTimer();   // Start on load
-
-    let liveChartInstance = null;
-    let dayChartInstance = null;
-    let livePVData = Array(30).fill(0);
-    let liveLabels = Array(30).fill('');
-    let fetchedLogData = [];
-
-    window.addEventListener('load', () => {
-        lucide.createIcons();
-        initCharts();
-        auth.signInAnonymously().catch(console.error);
-        startFirebaseListener();
-        
-        document.getElementById('logDateSelector').valueAsDate = new Date(); // Set to today by default
-        
-        // Setup Drag & Drop
-        const dropzone = document.getElementById('upload-dropzone');
-        dropzone.addEventListener('click', () => document.getElementById('fw-file-input').click());
-        dropzone.addEventListener('dragover', (e) => { e.preventDefault(); e.currentTarget.classList.add('bg-gray-100'); });
-        dropzone.addEventListener('dragleave', (e) => { e.currentTarget.classList.remove('bg-gray-100'); });
-        dropzone.addEventListener('drop', handleDrop);
-    });
 
     // --- IDLE & VISIBILITY LOGIC ---
     function resetIdleTimer() {
+        if (!isAuthenticated) return; // No need to track if not logged in
+
         // 1. Clear existing timer
         if (idleTimer) clearTimeout(idleTimer);
 
@@ -353,19 +365,24 @@
 
     // Handle Tab Switching / Minimize
     document.addEventListener("visibilitychange", () => {
-        if (document.hidden) {
+        if (document.hidden && isAuthenticated) {
             // Immediately kill connection when tab is hidden
             stopFirebaseListener(); 
-        } else {
+        } else if (!document.hidden && isAuthenticated) {
             // Immediately restore connection when tab comes back
             startFirebaseListener();
             resetIdleTimer();
+        } else {
+            // Tab is visible but not authenticated
+            stopFirebaseListener();
         }
     });
     
     // Safety net: Ensures disconnection if the user closes the window/tab directly
     window.addEventListener("pagehide", () => {
-        stopFirebaseListener();
+        if (isAuthenticated) {
+            stopFirebaseListener();
+        }
     });
 
     function switchView(id) {
