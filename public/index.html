@@ -84,8 +84,8 @@
                         <span id="conn-dot" class="inline-block w-2 h-2 rounded-full bg-red-500"></span>
                         <span id="connection-status">Firebase Connecting...</span>
                         
-                        <span id="conn-dot-modbus" class="inline-block w-2 h-2 rounded-full bg-red-500"></span>
-                        <span id="connection-status-modbus">Modbus Connecting...</span>
+                        <span id="conn-dot-device" class="inline-block w-2 h-2 rounded-full bg-red-500"></span>
+                        <span id="device-status">Modbus Connecting...</span>
                     </p>
                 </div>
                 <div class="flex bg-white dark:bg-slate-900 p-1 rounded-lg border border-gray-200 dark:border-slate-800 shadow-sm flex-wrap gap-1">
@@ -364,7 +364,7 @@
     }
 
     // Handle Tab Switching / Minimize
-    document.addEventListener("visibilitychange", () => {
+    /* document.addEventListener("visibilitychange", () => {
         if (document.hidden && isAuthenticated) {
             // Immediately kill connection when tab is hidden
             stopFirebaseListener(); 
@@ -376,7 +376,7 @@
             // Tab is visible but not authenticated
             stopFirebaseListener();
         }
-    });
+    }); */
     
     // Safety net: Ensures disconnection if the user closes the window/tab directly
     window.addEventListener("pagehide", () => {
@@ -409,8 +409,27 @@
         console.log("Starting Connection...");
         firebase.database().goOnline(); // Ensure socket is open
 
+        const devStatus = document.getElementById('device-status');
+        const devDot = document.getElementById('conn-dot-device');
         const statusEl = document.getElementById('connection-status');
         const dotEl = document.getElementById('conn-dot');
+
+        // --- TAMBAHAN LISTENER STATUS PERANGKAT ---
+        db.ref('epever/is_online').on('value', (snapshot) => {
+            const isDeviceOnline = snapshot.val(); // true atau false
+            
+            // Update UI Dot Indikator Utama
+            if (isDeviceOnline === true) {
+                devStatus.textContent = "Device Online";
+                devStatus.className = "text-sm text-green-600 font-bold";
+                devDot.className = "inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse";
+            } else {
+                devStatus.textContent = "Device Offline";
+                devStatus.className = "text-sm text-red-600 font-bold";
+                devDot.className = "inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse";
+            }
+        });
+        // --- AKHIR TAMBAHAN ---
         
         db.ref('epever/live').on('value', (snapshot) => {
             const data = snapshot.val();
@@ -444,9 +463,6 @@
     }
 
     function updateUI(data) {
-        document.getElementById('connection-status-modbus').textContent = data.isConnected ? "Modbus Connected" : "Modbus Disconnected";
-        document.getElementById('conn-dot-modbus').className = data.isConnected ? "inline-block w-2 h-2 rounded-full bg-solar-500 animate-pulse" : "inline-block w-2 h-2 rounded-full bg-red-500";
-
         const statusLabel = getStatusLabel(data.status_code);
         const statusEl = document.getElementById('charging-stage-display');
         statusEl.textContent = statusLabel.text;
@@ -456,8 +472,9 @@
         document.getElementById('pv-bar').style.width = Math.min((data.pv.power/500)*100, 100) + "%";
         document.getElementById('battery-voltage').textContent = data.batt.volt.toFixed(2);
         document.getElementById('load-power').textContent = Math.floor(data.load.power);
-        document.getElementById('detail-temp').textContent = data.temp.toFixed(1);
         document.getElementById('gauge-soc-text').textContent = Math.round(data.batt.soc) + "%";
+        document.getElementById('detail-pv-volt').textContent = data.pvVolt.toFixed(1);
+        document.getElementById('detail-temp').textContent = data.temp.toFixed(1);
         
         const offset = 282.7 - ((data.batt.soc/100) * 282.7);
         const ring = document.querySelector('.gauge-ring');
@@ -465,6 +482,30 @@
 
         if(liveChartInstance){
             livePVData.push(data.pv.power); livePVData.shift(); liveChartInstance.update('none');
+        }
+
+        // Cek selisih waktu sekarang vs waktu data terakhir (timestamp dari ESP32)
+        const now = Date.now() / 1000; // Detik sekarang
+        const dataTime = data.timestamp || 0; 
+        const diff = now - dataTime;
+
+        // Kalau data telat lebih dari 60 detik, anggap hang. 120 detik, set is_online ke false di database.
+        if (diff > 120) {
+            document.getElementById('device-status').textContent = "Device Offline";
+            document.getElementById('device-status').className = "text-sm text-red-600 font-bold";
+            document.getElementById('conn-dot-device').className = "inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse";
+            db.ref('epever/is_online').set(false)
+                .catch((error) => console.error("Gagal update DB:", error));
+        } else if (diff > 60) {
+            document.getElementById('device-status').textContent = "Device Probably Offline";
+            document.getElementById('device-status').className = "text-sm text-orange-600 font-bold";
+            document.getElementById('conn-dot-device').className = "inline-block w-2 h-2 rounded-full bg-orange-500 animate-bounce";
+        } else {
+            document.getElementById('device-status').textContent = "Device Online";
+            document.getElementById('device-status').className = "text-sm text-green-600 font-bold";
+            document.getElementById('conn-dot-device').className = "inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse";
+            db.ref('epever/is_online').set(true)
+                .catch((error) => console.error("Gagal update DB:", error));
         }
     }
 
@@ -516,8 +557,8 @@
         const dateInput = document.getElementById('logDateSelector').value;
         if(!dateInput) return alert("Select a date");
 
-        const startTs = new Date(dateInput).getTime() / 1000;
-        const endTs = startTs + 86400;
+        const startTs = new Date(dateInput).getTime() / 1000;       // Start of selected day in seconds
+        const endTs = startTs + 86400;                              // End of selected day in seconds
 
         const tbody = document.getElementById('detail-table-body');
         tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center">Loading...</td></tr>';
@@ -536,11 +577,11 @@
             let chartLabels = [];
             let chartData = [];
 
-            const logs = Object.values( data).sort((a,b) => a.ts - b.ts);
+            const logs = Object.values(data).sort((a,b) => a.hStamp - b.hStamp);    // Sort descending by timestamp
 
             logs.forEach(log => {
-                const dateObj = new Date(log.hStamp * 1000);
-                const timeStr = dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                const dateObj = new Date(log.hStamp * 1000);    // Convert to milliseconds
+                const timeStr = dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); // Format HH:MM
                 const statusStr = getStatusLabel(log.hCCode); // Decode 'hCCode' from DB
                 const statusStrEL = `<span class="px-2 py-1 rounded text-xs font-bold bg-gray-100 ${statusStr.color}">${statusStr.text}</span>`;
                 fetchedLogData.push({ time: timeStr, ...log }); 
