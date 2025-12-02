@@ -17,7 +17,7 @@ FirebaseConfig config;
 ModbusMaster node;
 
 // --- FIRMWARE INFO ---
-const char* FIRMWARE_VERSION = "1.0.7";
+const char* FIRMWARE_VERSION = "1.0.8";
 const char* NTP_SERVER = "pool.ntp.org";
 const long  GMT_OFFSET_SEC = 25200; // WIB (UTC+7) = 7 * 3600
 const int   DAYLIGHT_OFFSET_SEC = 0;
@@ -34,19 +34,36 @@ const int HISTORY_INTERVAL = 15 * 60 * 1000; // Save History every 15 mins
 #define TX_PIN 17
 
 // --- REGISTERS ---
-// Live Data
-const uint16_t REG_PV_VOLTAGE      = 0x3100;
-const uint16_t REG_PV_CURRENT      = 0x3101; 
-const uint16_t REG_PV_POWER_L      = 0x3102;
-const uint16_t REG_BAT_VOLTAGE     = 0x3104; 
-const uint16_t REG_CHARGE_CURRENT  = 0x3105;
-const uint16_t REG_LOAD_VOLTAGE    = 0x310C; 
-const uint16_t REG_LOAD_CURRENT    = 0x310D;
-const uint16_t REG_LOAD_POWER_L    = 0x310E; 
-const uint16_t REG_TEMP_CTRL       = 0x3111;
-const uint16_t REG_BAT_SOC         = 0x311A;
-const uint16_t REG_STATUS          = 0x3201;
-const uint16_t REG_DAILY_ENERGY_L  = 0x330C;
+// Real-time Data (Read Only)
+const uint16_t REG_PV_VOLTAGE         = 0x3100;
+const uint16_t REG_PV_CURRENT         = 0x3101; 
+const uint16_t REG_PV_POWER_L         = 0x3102;
+const uint16_t REG_BAT_VOLTAGE        = 0x3104; 
+const uint16_t REG_CHARGE_CURRENT     = 0x3105;
+const uint16_t REG_LOAD_VOLTAGE       = 0x310C; 
+const uint16_t REG_LOAD_CURRENT       = 0x310D;
+const uint16_t REG_LOAD_POWER_L       = 0x310E; 
+const uint16_t REG_TEMP_CTRL          = 0x3111;
+const uint16_t REG_BAT_SOC            = 0x311A;
+const uint16_t REG_STATUS             = 0x3201;  // Charging Equip. Status
+const uint16_t REG_DAILY_ENERGY_L     = 0x330C;
+const uint16_t REG_MAX_BATTERY_VOLT   = 0x3302;
+// Parameter Settings (Read/Write)
+const uint16_t REG_BATTERY_TYPE         = 0x9000;
+const uint16_t REG_BATTERY_CAPACITY     = 0x9001;
+const uint16_t REG_TEMP_COMPENSATION    = 0x9002;
+const uint16_t REG_H_VOLT_DISCONNECT    = 0x9003;
+const uint16_t REEG_CHARGING_LIMIT_VOLT = 0x9004;
+const uint16_t REG_OVERVOLT_RECONNECT   = 0x9005;
+const uint16_t REG_EQ_VOLTAGE           = 0x9006;
+const uint16_t REG_BOOST_VOLTAGE        = 0x9007;
+const uint16_t REG_FLOAT_VOLTAGE        = 0x9008;
+const uint16_t REG_BOOST_RECONNECT_VOLT = 0x9009;
+const uint16_t REG_LOW_VOLT_RECONNECT   = 0x900A;
+const uint16_t REG_UNDER_VOLT_RECOVER   = 0x900B;
+const uint16_t REG_UNDER_VOLT_WARNING   = 0x900C;
+const uint16_t REG_LOW_VOLT_DISCONNECT  = 0x900D;
+const uint16_t REG_DISCHARGE_LIMIT_VOLT = 0x900E;
 
 struct EpeverData {
   bool connected; // Modbus connection status
@@ -179,7 +196,6 @@ void checkOTA() {
 
 void readSensors() {
   uint8_t result;
-
   result = node.readInputRegisters(REG_STATUS, 1);
   if (result == node.ku8MBSuccess) {
     live.status = node.getResponseBuffer(0);
@@ -190,24 +206,36 @@ void readSensors() {
     return; // Skip reading other registers if not connected
   }
   
-  node.readInputRegisters(REG_PV_VOLTAGE, 2);
+  node.readInputRegisters(REG_PV_VOLTAGE, 1);
   live.pvVolt = node.getResponseBuffer(0) / 100.0f;
-  live.pvAmps = node.getResponseBuffer(1) / 100.0f;
+  delay(5);
+
+  node.readInputRegisters(REG_PV_CURRENT, 1);
+  live.pvAmps = node.getResponseBuffer(0) / 100.0f;
   delay(5);
 
   node.readInputRegisters(REG_PV_POWER_L, 2);
   live.pvPower = ((uint32_t)node.getResponseBuffer(0) | ((uint32_t)node.getResponseBuffer(1) << 16)) / 100.0f;
   delay(5);
 
-  node.readInputRegisters(REG_BAT_VOLTAGE, 2);
+  node.readInputRegisters(REG_BAT_VOLTAGE, 1);
   live.battVolt = node.getResponseBuffer(0) / 100.0f;
-  live.chgAmps = node.getResponseBuffer(1) / 100.0f;
   delay(5);
 
-  node.readInputRegisters(REG_LOAD_VOLTAGE, 4);
+  node.readInputRegisters(REG_CHARGE_CURRENT, 1);
+  live.chgAmps = node.getResponseBuffer(0) / 100.0f;
+  delay(5);
+
+  node.readInputRegisters(REG_LOAD_VOLTAGE, 1);
   live.loadVolt = node.getResponseBuffer(0) / 100.0f;
-  live.loadAmps = node.getResponseBuffer(1) / 100.0f;
-  live.loadPower = ((uint32_t)node.getResponseBuffer(2) | ((uint32_t)node.getResponseBuffer(3) << 16)) / 100.0f;
+  delay(5);
+
+  node.readInputRegisters(REG_LOAD_CURRENT, 1);
+  live.loadAmps = node.getResponseBuffer(0) / 100.0f;
+  delay(5);
+
+  node.readInputRegisters(REG_LOAD_POWER_L, 2);
+  live.loadPower = ((uint32_t)node.getResponseBuffer(0) | ((uint32_t)node.getResponseBuffer(1) << 16)) / 100.0f;
   delay(5);
 
   node.readInputRegisters(REG_TEMP_CTRL, 1);
@@ -235,18 +263,18 @@ void loop() {
       time_t now = getTimestamp();
       
       FirebaseJson json;
-      json.set("isConnected", live.connected);  // Modbus Connection Status
-      json.set("pv/volt", live.pvVolt);
-      json.set("pv/amps", live.pvAmps);
-      json.set("pv/power", live.pvPower); 
-      json.set("batt/volt", live.battVolt); 
-      json.set("batt/amps", live.chgAmps);
-      json.set("batt/soc", live.battSOC); 
-      json.set("load/power", live.loadPower); 
-      json.set("load/amps", live.loadAmps);
-      json.set("temp", live.temp); 
-      json.set("daily_kwh", live.dailyEnergy); 
-      json.set("status_code", live.status);
+      json.set("isConnected", live.connected); // Modbus Connection Status
+      json.set("pv/volt", live.pvVolt); // PV Voltage
+      json.set("pv/amps", live.pvAmps); // PV Current
+      json.set("pv/power", live.pvPower); // PV Power
+      json.set("batt/volt", live.battVolt); // Battery Voltage
+      json.set("batt/amps", live.chgAmps); // Charge Current
+      json.set("batt/soc", live.battSOC); // Battery SOC
+      json.set("load/power", live.loadPower); // Load Power
+      json.set("load/amps", live.loadAmps); // Load Current
+      json.set("temp", live.temp); // Temperature
+      json.set("daily_kwh", live.dailyEnergy); // Daily Energy
+      json.set("status_code", live.status); // Status Code
       
       // Use Real Timestamp if available, else millis
       if(now > 10000) json.set("timestamp", (int)now);

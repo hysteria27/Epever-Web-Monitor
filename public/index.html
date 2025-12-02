@@ -474,7 +474,9 @@
         document.getElementById('load-power').textContent = Math.floor(data.load.power);
         document.getElementById('gauge-soc-text').textContent = Math.round(data.batt.soc) + "%";
         document.getElementById('detail-pv-volt').textContent = data.pvVolt.toFixed(1);
+        document.getElementById('detail-chg-amp').textContent = data.chargeCurrent.toFixed(1);
         document.getElementById('detail-temp').textContent = data.temp.toFixed(1);
+        document.getElementById('detail-daily-energy').textContent=data.dailyKwh?data.dailyKwh.toFixed(2):"0.00";
         
         const offset = 282.7 - ((data.batt.soc/100) * 282.7);
         const ring = document.querySelector('.gauge-ring');
@@ -577,11 +579,7 @@
             let chartLabels = [];
             let chartData = [];
 
-<<<<<<< HEAD
             const logs = Object.values(data).sort((a,b) => a.hStamp - b.hStamp);    // Sort descending by timestamp
-=======
-            const logs = Object.values( data).sort((a,b) => b.ts - a.ts);    // Sort descending by timestamp
->>>>>>> 87e5dd2fda8d1a2b4f6dc432a70aa1ad7045db8b
 
             logs.forEach(log => {
                 const dateObj = new Date(log.hStamp * 1000);    // Convert to milliseconds
