@@ -17,7 +17,7 @@ FirebaseConfig config;
 ModbusMaster node;
 
 // --- FIRMWARE INFO ---
-const char* FIRMWARE_VERSION = "1.0.8";
+const char* FIRMWARE_VERSION = "1.0.9";
 const char* NTP_SERVER = "pool.ntp.org";
 const long  GMT_OFFSET_SEC = 25200; // WIB (UTC+7) = 7 * 3600
 const int   DAYLIGHT_OFFSET_SEC = 0;
@@ -74,8 +74,6 @@ struct EpeverData {
   uint16_t status;
 };
 EpeverData live;
-
-bool isOnline = false; // Device online status
 
 // Get Unix Timestamp
 time_t getTimestamp() {
@@ -159,14 +157,8 @@ void setup() {
 
   if (Firebase.ready()) {
     Serial.println("Firebase Realtime Database Connected");
-    isOnline = true;
-    if (!Firebase.RTDB.setBool(&fbDO, "/epever/is_online", isOnline)) {
-      isOnline = false;
-    }
-  } else {
-    Serial.printf("RTDB Connection Failed: %s\n", fbDO.errorReason().c_str());
+    Firebase.RTDB.setBool(&fbDO, "/epever/is_online", true);  // Set online status
   }
-
   checkFirmware();
 }
 

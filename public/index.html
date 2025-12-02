@@ -46,8 +46,17 @@
     </style>
 </head>
 <body class="bg-gray-50 dark:bg-slate-950 text-gray-800 dark:text-gray-100 min-h-screen flex flex-col">
+    <!-- LOADING SCREEN -->
+    <div id="view-loading" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gray-50 dark:bg-slate-950 transition-opacity duration-500">
+        <div class="text-center">
+            <i data-lucide="loader-2" class="w-12 h-12 text-solar-500 animate-spin mx-auto mb-4"></i>
+            <h2 class="text-xl font-bold text-gray-700 dark:text-gray-200">Solar Monitor</h2>
+            <p class="text-sm text-gray-500 mt-2">Checking connection...</p>
+        </div>
+    </div>
+
     <!-- LOGIN SCREEN -->
-    <div id="view-login" class="flex-grow flex items-center justify-center p-4">
+    <div id="view-login" class="hidden-view flex-grow flex items-center justify-center p-4">
         <div class="bg-white dark:bg-slate-900 p-8 rounded-2xl shadow-xl border border-gray-100 dark:border-slate-800 w-full max-w-md">
             <div class="text-center mb-8">
                 <i data-lucide="zap" class="w-12 h-12 text-solar-500 mx-auto mb-2"></i>
@@ -239,24 +248,6 @@
         </div>
     </div>
 <script>
-    /*
-    document.getElementById('upload-dropzone')?.addEventListener('drop', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        e.currentTarget.classList.remove('bg-gray-100', 'dark:bg-slate-800');
-        if (e.dataTransfer.files.length > 0) {
-            const file = e.dataTransfer.files[0];
-            if (file.name.endsWith('.bin')) {
-                selectedFile = file;
-                document.getElementById('fw-message').textContent = `Selected: ${file.name}`;
-                document.getElementById('fw-message').className = 'text-xs text-center text-green-600 dark:text-green-400';
-            } else {
-                document.getElementById('fw-message').textContent = 'Please drop a .bin file';
-                document.getElementById('fw-message').className = 'text-xs text-center text-red-600';
-            }
-        }
-    });*/
-
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
     const storage = firebase.storage();
@@ -278,6 +269,7 @@
     let livePVData = Array(30).fill(0);
     let liveLabels = Array(30).fill('');
     let fetchedLogData = [];
+    let lastPacketTime = Date.now(); // To track device timeouts
 
     window.addEventListener('load', () => {
         lucide.createIcons();
@@ -293,24 +285,58 @@
         dropzone.addEventListener('dragover', (e) => { e.preventDefault(); e.currentTarget.classList.add('bg-gray-100'); });
         dropzone.addEventListener('dragleave', (e) => { e.currentTarget.classList.remove('bg-gray-100'); });
         dropzone.addEventListener('drop', handleDrop);
+
+        setInterval(() => {
+            const now = Date.now();
+            const diff = (now - lastPacketTime) / 1000; // Selisih dalam detik
+            const devStatus = document.getElementById('device-status');
+            const devDot = document.getElementById('conn-dot-device');
+            if (diff > 120) { // Jika lebih dari 2 menit
+                devStatus.textContent = "Device Offline";
+                devStatus.className = "text-sm text-red-600 font-bold";
+                devDot.className = "inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse";
+                if (firebase.auth().currentUser) {db.ref('epever/is_online').set(false).catch(e => {});}
+            }
+        }, 5000); // Cek setiap 5 detik
     });
 
     // --- AUTH LOGIC ---
     auth.onAuthStateChanged((user) => {
+        // 1. Ambil elemen Loading
+        const loadingScreen = document.getElementById('view-loading');
+        
         if (user) {
-            // User Login -> Masuk Dashboard
+            // --- KONDISI: SUDAH LOGIN ---
+            
+            // Masuk Dashboard
             document.getElementById('view-login').classList.add('hidden-view');
             document.getElementById('view-app').classList.remove('hidden-view');
             document.getElementById('view-app').classList.add('flex');
+            
             startFirebaseListener();
             isAuthenticated = true;
+
         } else {
-            // User Logout -> Balik ke Login
-            document.getElementById('view-login').classList.remove('hidden-view');
+            // --- KONDISI: BELUM LOGIN ---
+            
+            // Tampilkan Login Screen
             document.getElementById('view-app').classList.add('hidden-view');
             document.getElementById('view-app').classList.remove('flex');
+            document.getElementById('view-login').classList.remove('hidden-view');
+            
             document.getElementById('login-btn-text').textContent = "Sign In";
             stopFirebaseListener();
+        }
+
+        // 2. Terakhir, hilangkan Loading Screen setelah keputusan dibuat
+        // Kita kasih sedikit delay/animasi agar transisi halus (opsional)
+        if (loadingScreen && !loadingScreen.classList.contains('hidden-view')) {
+            setTimeout(() => {
+                loadingScreen.classList.add('opacity-0'); // Efek fade out (jika didukung CSS)
+                setTimeout(() => {
+                    loadingScreen.classList.add('hidden-view');
+                }, 300); // Waktu tunggu animasi fade out
+            }, 500); // Delay minimal agar loading tidak cuma kedip
         }
     });
 
@@ -463,6 +489,8 @@
     }
 
     function updateUI(data) {
+        lastPacketTime = Date.now(); // reset when packet received
+
         const statusLabel = getStatusLabel(data.status_code);
         const statusEl = document.getElementById('charging-stage-display');
         statusEl.textContent = statusLabel.text;
