@@ -577,7 +577,11 @@
             let chartLabels = [];
             let chartData = [];
 
+<<<<<<< HEAD
             const logs = Object.values(data).sort((a,b) => a.hStamp - b.hStamp);    // Sort descending by timestamp
+=======
+            const logs = Object.values( data).sort((a,b) => b.ts - a.ts);    // Sort descending by timestamp
+>>>>>>> 87e5dd2fda8d1a2b4f6dc432a70aa1ad7045db8b
 
             logs.forEach(log => {
                 const dateObj = new Date(log.hStamp * 1000);    // Convert to milliseconds
