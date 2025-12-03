@@ -313,24 +313,16 @@
 
     // --- AUTH LOGIC ---
     auth.onAuthStateChanged((user) => {
-        // 1. Ambil elemen Loading
         const loadingScreen = document.getElementById('view-loading');
         
         if (user) {
-            // --- KONDISI: SUDAH LOGIN ---
-            
-            // Masuk Dashboard
             document.getElementById('view-login').classList.add('hidden-view');
             document.getElementById('view-app').classList.remove('hidden-view');
             document.getElementById('view-app').classList.add('flex');
             
             startFirebaseListener();
             isAuthenticated = true;
-
         } else {
-            // --- KONDISI: BELUM LOGIN ---
-            
-            // Tampilkan Login Screen
             document.getElementById('view-app').classList.add('hidden-view');
             document.getElementById('view-app').classList.remove('flex');
             document.getElementById('view-login').classList.remove('hidden-view');
@@ -381,7 +373,7 @@
 
     // --- IDLE & VISIBILITY LOGIC ---
     function resetIdleTimer() {
-        if (!isAuthenticated) return; // No need to track if not logged in
+        if (!isAuthenticated) return;                      // No need to track if not logged in
 
         // 1. Clear existing timer
         if (idleTimer) clearTimeout(idleTimer);
@@ -431,8 +423,8 @@
         const activeClass = "bg-solar-500 text-white shadow-md";
         const inactiveClass = "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800";
 
-        if(id==='history') fetchDayLog(); // Auto fetch log when switched to history view
-        if(id==='firmware') fetchFirmwareInfo(); // Auto fetch firmware info when switched to firmware view
+        if(id==='history') fetchDayLog();               // Auto fetch log when switched to history view
+        if(id==='firmware') fetchFirmwareInfo();        // Auto fetch firmware info when switched to firmware view
         
         document.getElementById('btn-dashboard').className = `px-4 py-2 rounded-md text-sm font-medium transition-all flex gap-2 items-center ${id==='dashboard'?activeClass:inactiveClass}`;
         document.getElementById('btn-history').className = `px-4 py-2 rounded-md text-sm font-medium transition-all flex gap-2 items-center ${id==='history'?activeClass:inactiveClass}`;
@@ -440,8 +432,7 @@
     }
 
     function startFirebaseListener() {
-        // Prevent double connections
-        if (isConnectionActive) return;
+        if (isConnectionActive) return;         // Prevent double connections
 
         console.log("Starting Connection...");
         firebase.database().goOnline(); // Ensure socket is open
@@ -630,7 +621,7 @@
                 return;
             }
 
-            const logs = Object.values(data).sort((a,b) => a.hStamp - b.hStamp);
+            const logs = Object.values(data).sort((a,b) => b.hStamp - a.hStamp);
 
             logs.forEach(log => {
                 const dateObj = new Date(log.hStamp * 1000);    // Convert to milliseconds
@@ -651,6 +642,8 @@
                 chartData.push(log.hPWatt);
             });
             tbody.innerHTML = html;
+            chartLabels.reverse();
+            chartData.reverse();
 
             getDayChartInstance(chartLabels, chartData); // Update chart
         })
