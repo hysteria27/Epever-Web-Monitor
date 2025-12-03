@@ -117,7 +117,18 @@
                 
                 <!-- Charts & SOC -->
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div class="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-6 rounded-xl shadow-sm flex flex-col items-center justify-center has-tooltip" title="Estimated Battery State of Charge"><h3 class="text-sm font-bold text-gray-500 mb-4">SOC</h3><div class="w-48 h-48 relative"><svg class="w-full h-full" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="8" class="text-gray-100 dark:text-slate-800"></circle><circle id="gauge-ring" cx="50" cy="50" r="45" fill="none" stroke="#eab308" stroke-width="8" stroke-dasharray="282.7" stroke-dashoffset="282.7" class="gauge-ring"></circle></svg><div class="absolute inset-0 flex flex-col items-center justify-center"><span id="gauge-soc-text" class="text-4xl font-black">0%</span></div></div></div>
+                    <div class="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-6 rounded-xl shadow-sm flex flex-col items-center justify-center has-tooltip" title="Estimated Battery State of Charge">
+                        <h3 class="text-sm font-bold text-gray-500 mb-4">SOC</h3>
+                        <div class="w-48 h-48 relative">
+                            <svg class="w-full h-full" viewBox="0 0 100 100">
+                                <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="8" class="text-gray-100 dark:text-slate-800"></circle>
+                                <circle id="gauge-ring" cx="50" cy="50" r="45" fill="none" stroke="#eab308" stroke-width="8" stroke-dasharray="282.7" stroke-dashoffset="282.7" class="gauge-ring"></circle>
+                            </svg>
+                            <div class="absolute inset-0 flex flex-col items-center justify-center">
+                                <span id="gauge-soc-text" class="text-4xl font-black">0%</span>
+                            </div>
+                        </div>
+                    </div>
                     <div class="lg:col-span-2 bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-6 rounded-xl shadow-sm"><div class="flex justify-between items-center mb-4"><h3 class="font-bold text-lg">Live Flow</h3><span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Live</span></div><div class="h-64 w-full"><canvas id="liveChart"></canvas></div></div>
                 </div>
 
@@ -496,19 +507,20 @@
         statusEl.textContent = statusLabel.text;
         statusEl.className = `text-lg font-bold mt-1 ${statusLabel.color}`;
 
-        document.getElementById('panel-power').textContent = Math.floor(data.pv.power);
+        document.getElementById('panel-power').textContent = data.pv.power.toFixed(2);
         document.getElementById('pv-bar').style.width = Math.min((data.pv.power/500)*100, 100) + "%";
         document.getElementById('battery-voltage').textContent = data.batt.volt.toFixed(2);
-        document.getElementById('load-power').textContent = Math.floor(data.load.power);
+        document.getElementById('load-power').textContent = data.load.power.toFixed(2);
         document.getElementById('gauge-soc-text').textContent = Math.round(data.batt.soc) + "%";
-        document.getElementById('detail-pv-volt').textContent = data.pvVolt.toFixed(1);
-        document.getElementById('detail-chg-amp').textContent = data.chargeCurrent.toFixed(1);
+        document.getElementById('detail-pv-volt').textContent = data.pv.volt.toFixed(2);
+        document.getElementById('detail-chg-amp').textContent = data.batt.amps.toFixed(2);
         document.getElementById('detail-temp').textContent = data.temp.toFixed(1);
-        document.getElementById('detail-daily-energy').textContent=data.dailyKwh?data.dailyKwh.toFixed(2):"0.00";
+        document.getElementById('detail-daily-energy').textContent = data.daily_kwh.toFixed(2);
         
         const offset = 282.7 - ((data.batt.soc/100) * 282.7);
         const ring = document.querySelector('.gauge-ring');
         if(ring) { ring.style.strokeDashoffset = offset; ring.style.stroke = data.batt.soc < 30 ? "#ef4444" : "#22c55e"; }
+        else console.error("Gauge ring element not found");
 
         if(liveChartInstance){
             livePVData.push(data.pv.power); livePVData.shift(); liveChartInstance.update('none');
@@ -597,17 +609,17 @@
         .then(snapshot => {
             const data = snapshot.val();
             fetchedLogData = []; 
+
+            let html = '';
+            let chartLabels = [];
+            let chartData = [];
             
             if(!data) {
                 tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center">No data found for this date</td></tr>';
                 return;
             }
 
-            let html = '';
-            let chartLabels = [];
-            let chartData = [];
-
-            const logs = Object.values(data).sort((a,b) => a.hStamp - b.hStamp);    // Sort descending by timestamp
+            const logs = Object.values(data).sort((a,b) => a.hStamp - b.hStamp);
 
             logs.forEach(log => {
                 const dateObj = new Date(log.hStamp * 1000);    // Convert to milliseconds
@@ -627,7 +639,6 @@
                 chartLabels.push(timeStr);
                 chartData.push(log.hBVolt);
             });
-
             tbody.innerHTML = html;
 
             // --- FIXED CHART UPDATE LOGIC ---
