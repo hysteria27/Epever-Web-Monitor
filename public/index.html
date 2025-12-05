@@ -16,6 +16,7 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     
     <script src="fbConfig.js"> // --- FIREBASE CONFIG --- </script>
+    <script src="main.js"></script>
 
     <script>
         tailwind.config = {
@@ -50,7 +51,7 @@
     <div id="view-loading" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gray-50 dark:bg-slate-950 transition-opacity duration-500">
         <div class="text-center">
             <i data-lucide="loader-2" class="w-12 h-12 text-solar-500 animate-spin mx-auto mb-4"></i>
-            <h2 class="text-xl font-bold text-gray-700 dark:text-gray-200">Solar Monitor</h2>
+            <h2 class="text-xl font-bold text-gray-700 dark:text-gray-200">Epever Solar Monitor</h2>
             <p class="text-sm text-gray-500 mt-2">Checking connection...</p>
         </div>
     </div>
@@ -84,65 +85,182 @@
     <div id="view-app" class="hidden-view flex-col min-h-screen">
         <div class="max-w-7xl mx-auto w-full p-4 md:p-6 lg:p-8">
             <!-- Header -->
-            <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-                <div>
-                    <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight flex items-center gap-2">
-                        <i data-lucide="zap" class="text-solar-500 w-8 h-8"></i>Solar Monitor
-                    </h1>
-                    <p class="text-gray-500 dark:text-gray-400 text-sm mt-1 flex items-center gap-2">
-                        <span id="conn-dot" class="inline-block w-2 h-2 rounded-full bg-red-500"></span>
-                        <span id="connection-status">Firebase Connecting...</span>
-                        
-                        <span id="conn-dot-device" class="inline-block w-2 h-2 rounded-full bg-red-500"></span>
-                        <span id="device-status">Modbus Connecting...</span>
-                    </p>
+            <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-7 gap-4">
+                <div class="flex flex-col gap-y-2">
+                    <div class="flex items-center gap-3">
+                        <i data-lucide="zap" class="text-solar-500 w-8 h-8 md:w-10 md:h-10 flex-shrink-0"></i>
+
+                        <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-solar-500 to-blue-600 dark:from-solar-400 dark:to-blue-400">
+                        Epever Solar Monitor
+                        </h1>
+                    </div>
+
+                    <div class="flex items-center gap-4 text-sm font-medium text-gray-500 dark:text-gray-400 pl-1">
+                        <div class="flex items-center gap-2">
+                            <span class="relative flex h-2.5 w-2.5">
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                            </span>
+                            <span>Firebase Connected</span>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <span class="relative flex h-2.5 w-2.5">
+                                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                            </span>
+                            <span class="text-red-600 dark:text-red-400 font-semibold">Device Offline</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="flex bg-white dark:bg-slate-900 p-1 rounded-lg border border-gray-200 dark:border-slate-800 shadow-sm flex-wrap gap-1">
-                    <button onclick="switchView('dashboard')" id="btn-dashboard" class="px-4 py-2 rounded-md text-sm font-medium flex gap-2 items-center transition-all bg-solar-500 text-white shadow-md"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> Live</button>
-                    <button onclick="switchView('history')" id="btn-history" class="px-4 py-2 rounded-md text-sm font-medium flex gap-2 items-center text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800 transition-all"><i data-lucide="calendar-clock" class="w-4 h-4"></i> Log</button>
-                    <button onclick="switchView('firmware')" id="btn-firmware" class="px-4 py-2 rounded-md text-sm font-medium flex gap-2 items-center text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800 transition-all"><i data-lucide="package" class="w-4 h-4"></i> OTA</button>
-                </div>
-                <button onclick="doLogout()" class="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg" title="Logout"><i data-lucide="log-out" class="w-5 h-5"></i></button>
+
+                <div class="flex items-center gap-2 py-2">
+                    <button onclick="switchView('dashboard')"   id="btn-dashboard"  class="px-4 py-2 rounded-md text-sm font-medium flex gap-2 items-center bg-solar-500 text-white transition-all shadow-md"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> Live</button>
+                    <button onclick="switchView('history')"     id="btn-history"    class="px-4 py-2 rounded-md text-sm font-medium flex gap-2 items-center bg-white text-gray-600 hover:bg-gray-100 transition-all shadow-md"><i data-lucide="calendar-clock" class="w-4 h-4"></i> Log</button>
+                    <button onclick="switchView('firmware')"    id="btn-firmware"   class="px-4 py-2 rounded-md text-sm font-medium flex gap-2 items-center bg-white text-gray-600 hover:bg-gray-100 transition-all shadow-md"><i data-lucide="package" class="w-4 h-4"></i> OTA</button>
+                    
+                    <div class="h-6 w-px bg-gray-300 dark:bg-slate-700 mx-1"></div>
+
+                    <button id="doLogout"
+                            onclick="doLogout()" 
+                            class="p-2.5 rounded-full bg-white border border-gray-200 text-gray-600 hover:ring-2 hover:ring-red-500/50 transition-all shadow-md" 
+                            title="Logout">
+                                <i data-lucide="log-out" class="w-5 h-5"></i>
+                    </button>
+                </div>   
             </header>
 
             <!-- DASHBOARD VIEW -->
             <div id="view-dashboard" class="fade-in space-y-6">
                 <!-- KPI Cards -->
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div class="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-5 rounded-xl shadow-sm has-tooltip" title="Current charging stage (MPPT, Float, Boost, etc.)"><div><p class="text-xs font-bold text-gray-400 uppercase">Status</p><h3 id="charging-stage-display" class="text-lg font-bold mt-1">Standby</h3></div></div>
-                    <div class="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-5 rounded-xl shadow-sm has-tooltip" title="Real-time power generated by solar panels"><div><p class="text-xs font-bold text-gray-400 uppercase">PV Power</p><h3 id="panel-power" class="text-2xl font-black">0</h3><span class="text-sm text-gray-500">W</span></div><div class="w-full bg-gray-100 dark:bg-slate-800 h-1.5 rounded-full mt-3 overflow-hidden"><div id="pv-bar" class="bg-orange-500 h-full" style="width: 0%"></div></div></div>
-                    <div class="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-5 rounded-xl shadow-sm has-tooltip" title="Current battery bank voltage"><div><p class="text-xs font-bold text-gray-400 uppercase">Battery</p><h3 id="battery-voltage" class="text-2xl font-black">0.0</h3><span class="text-sm text-gray-500">V</span></div></div>
-                    <div class="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-5 rounded-xl shadow-sm has-tooltip" title="Power consumed by DC load output"><div><p class="text-xs font-bold text-gray-400 uppercase">DC Load</p><h3 id="load-power" class="text-2xl font-black">0</h3><span class="text-sm text-gray-500">W</span></div></div>
-                </div>
-                
-                <!-- Charts & SOC -->
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div class="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-6 rounded-xl shadow-sm flex flex-col items-center justify-center has-tooltip" title="Estimated Battery State of Charge">
-                        <h3 class="text-sm font-bold text-gray-500 mb-4">SOC</h3>
-                        <div class="w-48 h-48 relative">
-                            <svg class="w-full h-full" viewBox="0 0 100 100">
-                                <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="8" class="text-gray-100 dark:text-slate-800"></circle>
-                                <circle id="gauge-ring" cx="50" cy="50" r="45" fill="none" stroke="#eab308" stroke-width="8" stroke-dasharray="282.7" stroke-dashoffset="282.7" class="gauge-ring"></circle>
-                            </svg>
-                            <div class="absolute inset-0 flex flex-col items-center justify-center">
-                                <span id="gauge-soc-text" class="text-4xl font-black">0%</span>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6">
+                     <!-- Card 1: Status -->
+                    <div class="bg-white border border-gray-100 p-6 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col justify-center relative overflow-hidden group">
+                        <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <i data-lucide="shield-check" class="w-16 h-16 text-solar-500"></i>
+                        </div>
+                        
+                        <div class="flex justify-between items-center mb-3">
+                            <span class="text-xs font-bold uppercase tracking-wider text-gray-400">System Status</span>
+                            <i data-lucide="activity" class="w-5 h-5 text-solar-500"></i>
+                        </div>
+
+                        <div class="space-y-3 z-10">
+                            <div class="flex items-center gap-3 p-2 rounded-lg">
+                                <div id="controller-status-dot" class="w-3 h-3 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></div>
+                                <span id="controller-status-display" class="font-semibold text-sm">Normal</span>
+                            </div>
+
+                            <div class="flex items-center gap-2">
+                                <i data-lucide="zap" class="w-4 h-4 text-yellow-500"></i>
+                                <span id="charging-stage-display" class="text-lg font-bold text-gray-800 dark:text-gray-100">Standby</span>
                             </div>
                         </div>
                     </div>
-                    <div class="lg:col-span-2 bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-6 rounded-xl shadow-sm"><div class="flex justify-between items-center mb-4"><h3 class="font-bold text-lg">Live Flow</h3><span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Live</span></div><div class="h-64 w-full"><canvas id="liveChart"></canvas></div></div>
+
+                    <!-- Card 2: PV Power -->
+                    <div class="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-6 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col relative overflow-hidden">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">PV Input</span>
+                            <i data-lucide="sun" class="w-5 h-5 text-orange-500"></i>
+                        </div>
+                        <div class="flex items-baseline gap-2 mt-auto">
+                            <span id="panel-power" class="text-4xl font-extrabold text-gray-900 dark:text-white tracking-tight">0</span>
+                            <span class="text-lg font-medium text-gray-500">W</span>
+                        </div>
+                        <div class="mt-2 w-full bg-gray-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                            <div id="pv-bar" class="bg-gradient-to-r from-orange-400 to-red-500 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Card 3: Load Power -->
+                    <div class="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-6 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col relative overflow-hidden">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">DC Load</span>
+                            <i data-lucide="lightbulb" class="w-5 h-5 text-blue-500"></i>
+                        </div>
+                        <div class="flex items-baseline gap-2 mt-auto">
+                            <span id="load-power" class="text-4xl font-extrabold text-gray-900 dark:text-white tracking-tight">0</span>
+                            <span class="text-lg font-medium text-gray-500">W</span>
+                        </div>
+                        <div class="flex items-center gap-2 mt-2 text-sm text-gray-500">
+                            <span id="load-amp" class="font-mono text-xs bg-gray-100 dark:bg-slate-800 px-2 py-1 rounded">0.0 A</span>
+                        </div>
+                    </div>
+
+                    <!-- Card 4: Battery Voltage -->
+                    <div class="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-6 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Battery</span>
+                            <i data-lucide="battery-charging" class="w-5 h-5 text-solar-500"></i>
+                        </div>
+                        <div class="flex items-baseline gap-2 mt-auto">
+                            <span id="battery-voltage" class="text-4xl font-extrabold text-gray-900 dark:text-white tracking-tight">0.0</span>
+                            <span class="text-lg font-medium text-gray-500">V</span>
+                        </div>
+                        <div class="text-xs text-gray-400 mt-2">System Voltage: <span id="sys-volt-display">24V</span></div>
+                    </div>
+                </div>
+                
+                <!-- SOC -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                    <div class="bg-white border border-gray-100 p-6 rounded-2xl shadow-sm flex flex-col items-center justify-center relative">
+                        <h3 class="absolute top-6 left-6 text-xs font-bold uppercase tracking-wider text-gray-400 ">State of Charge</h3>
+                        <div class="w-48 h-48 relative mt-4">
+                            <svg class="w-full h-full transform rotate-0" viewBox="0 0 100 100">
+                                <!-- Background track -->
+                                <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="8" class="text-gray-100"></circle>
+                                <!-- Value track -->
+                                <circle id="gauge-ring" cx="50" cy="50" r="45" fill="none" stroke="#eab308" stroke-width="8" 
+                                        stroke-dasharray="282.7" stroke-dashoffset="282.7" stroke-linecap="round"
+                                        class="gauge-ring transition-all duration-1000 ease-out"></circle>
+                            </svg>
+                            <div class="absolute inset-0 flex flex-col items-center justify-center">
+                                <span id="gauge-soc-text" class="text-4xl font-black text-gray-800 dark:text-white tabular-nums">0%</span>
+                                <div class="flex items-center gap-1 mt-1">
+                                    <span id="battery-capacity-display" class="text-xs font-bold text-gray-500 dark:text-gray-400">200Ah</span>
+                                    <span class="text-[10px] uppercase text-gray-400 bg-gray-100 dark:bg-slate-800 px-1 rounded" id="battery-type-display">LiFePO4</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-2 bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-6 rounded-2xl shadow-sm flex flex-col">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="font-bold text-lg text-gray-800 dark:text-gray-100">Live Telemetry</h3>
+                            <span class="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 px-2 py-1 rounded font-mono">Modbus RTU</span>
+                        </div>
+
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 h-full">
+                            <div class="p-4 rounded-xl bg-gray-50 dark:bg-slate-800/50 border border-gray-100 dark:border-slate-700/50 flex flex-col justify-between">
+                                <div class="text-gray-500 dark:text-gray-400 text-xs font-medium">Panel Voltage</div>
+                                <div class="text-xl font-bold text-gray-900 dark:text-white"><span id="detail-pv-volt">0.0</span> <span class="text-sm font-normal text-gray-500">V</span></div>
+                            </div>
+                            <div class="p-4 rounded-xl bg-gray-50 dark:bg-slate-800/50 border border-gray-100 dark:border-slate-700/50 flex flex-col justify-between">
+                                <div class="text-gray-500 dark:text-gray-400 text-xs font-medium">Charge Current</div>
+                                <div class="text-xl font-bold text-gray-900 dark:text-white"><span id="detail-chg-amp">0.0</span> <span class="text-sm font-normal text-gray-500">A</span></div>
+                            </div>
+                            <div class="p-4 rounded-xl bg-gray-50 dark:bg-slate-800/50 border border-gray-100 dark:border-slate-700/50 flex flex-col justify-between">
+                                <div class="text-gray-500 dark:text-gray-400 text-xs font-medium">Device Temp</div>
+                                <div class="text-xl font-bold text-gray-900 dark:text-white"><span id="detail-temp">25.0</span> <span class="text-sm font-normal text-gray-500">°C</span></div>
+                            </div>
+                            <div class="p-4 rounded-xl bg-gray-50 dark:bg-slate-800/50 border border-gray-100 dark:border-slate-700/50 flex flex-col justify-between">
+                                <div class="text-gray-500 dark:text-gray-400 text-xs font-medium">Daily Energy</div>
+                                <div class="text-xl font-bold text-solar-500"><span id="detail-energy">0.0</span> <span class="text-sm font-normal">kWh</span></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Telemetry -->
+                <!-- Chart -->
                 <div class="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-6 rounded-2xl shadow-sm">
                     <div class="flex justify-between items-center mb-6">
-                        <h3 class="font-bold text-lg text-gray-800 dark:text-gray-100">Live Telemetry</h3>
-                        <span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded dark:bg-blue-900 dark:text-blue-300">Modbus RTU</span>
+                        <div>
+                            <h3 class="font-bold text-lg text-gray-800 dark:text-gray-100">Production Overview</h3>
+                            <p class="text-sm text-gray-500">Solar yield over the last 12 hours</p>
+                        </div>
                     </div>
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div class="p-4 bg-gray-50 dark:bg-slate-800/50 rounded-xl border border-gray-100 dark:border-slate-700/50 has-tooltip" title="Voltage from PV Array"><p class="text-xs text-gray-500 dark:text-gray-400 mb-1">Panel Voltage</p><p class="text-2xl font-bold text-gray-800 dark:text-white"><span id="detail-pv-volt">0.0</span> <span class="text-sm font-normal text-gray-500">V</span></p></div>
-                        <div class="p-4 bg-gray-50 dark:bg-slate-800/50 rounded-xl border border-gray-100 dark:border-slate-700/50 has-tooltip" title="Current flowing into battery"><p class="text-xs text-gray-500 dark:text-gray-400 mb-1">Charge Current</p><p class="text-2xl font-bold text-gray-800 dark:text-white"><span id="detail-chg-amp">0.0</span> <span class="text-sm font-normal text-gray-500">A</span></p></div>
-                        <div class="p-4 bg-gray-50 dark:bg-slate-800/50 rounded-xl border border-gray-100 dark:border-slate-700/50 has-tooltip" title="Internal Controller Temperature"><p class="text-xs text-gray-500 dark:text-gray-400 mb-1">Device Temp</p><p class="text-2xl font-bold text-gray-800 dark:text-white"><span id="detail-temp">0.0</span> <span class="text-sm font-normal text-gray-500">°C</span></p></div>
-                        <div class="p-4 bg-gray-50 dark:bg-slate-800/50 rounded-xl border border-gray-100 dark:border-slate-700/50 has-tooltip" title="Total Energy generated Today"><p class="text-xs text-gray-500 dark:text-gray-400 mb-1">Daily Energy</p><p class="text-2xl font-bold text-green-600 dark:text-green-400"><span id="detail-daily-energy">0.00</span> <span class="text-sm font-normal text-gray-500">kWh</span></p></div>
+                    <div class="relative h-72 w-full">
+                        <canvas id="liveChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -258,504 +376,5 @@
             </div>
         </div>
     </div>
-<script>
-    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-    const storage = firebase.storage();
-    const auth = firebase.auth();
-
-    let isAuthenticated = false;    // User authentication state
-    let isConnectionActive = false; // Prevents double-starting listeners
-    let idleTimer = null;           // Holds the countdown
-    const IDLE_TIMEOUT = 60000;     // 1 minute in milliseconds
-
-    const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];   // Events that count as "Activity"
-    activityEvents.forEach(event => {
-        document.addEventListener(event, resetIdleTimer, { passive: true });                // Attach activity listeners
-    });
-    // resetIdleTimer();   // Start on load
-
-    let liveChartInstance = null;
-    let dayChartInstance = null;
-    let livePVData = Array(30).fill(0);
-    let liveLabels = Array(30).fill('');
-    let fetchedLogData = [];
-    let lastPacketTime = Date.now(); // To track device timeouts
-
-    window.addEventListener('load', () => {
-        lucide.createIcons();
-        initCharts();
-        // auth.signInAnonymously().catch(console.error);
-        // startFirebaseListener();
-        
-        document.getElementById('logDateSelector').valueAsDate = new Date(); // Set to today by default
-        
-        // Setup Drag & Drop
-        const dropzone = document.getElementById('upload-dropzone');
-        dropzone.addEventListener('click', () => document.getElementById('fw-file-input').click());
-        dropzone.addEventListener('dragover', (e) => { e.preventDefault(); e.currentTarget.classList.add('bg-gray-100'); });
-        dropzone.addEventListener('dragleave', (e) => { e.currentTarget.classList.remove('bg-gray-100'); });
-        dropzone.addEventListener('drop', handleDrop);
-
-        setInterval(() => {
-            const now = Date.now();
-            const diff = (now - lastPacketTime) / 1000; // Selisih dalam detik
-            const devStatus = document.getElementById('device-status');
-            const devDot = document.getElementById('conn-dot-device');
-            if (diff > 120) { // Jika lebih dari 2 menit
-                devStatus.textContent = "Device Offline";
-                devStatus.className = "text-sm text-red-600 font-bold";
-                devDot.className = "inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse";
-                if (firebase.auth().currentUser) {db.ref('epever/is_online').set(false).catch(e => {});}
-            }
-        }, 5000); // Cek setiap 5 detik
-    });
-
-    // --- AUTH LOGIC ---
-    auth.onAuthStateChanged((user) => {
-        const loadingScreen = document.getElementById('view-loading');
-        
-        if (user) {
-            document.getElementById('view-login').classList.add('hidden-view');
-            document.getElementById('view-app').classList.remove('hidden-view');
-            document.getElementById('view-app').classList.add('flex');
-            
-            startFirebaseListener();
-            isAuthenticated = true;
-        } else {
-            document.getElementById('view-app').classList.add('hidden-view');
-            document.getElementById('view-app').classList.remove('flex');
-            document.getElementById('view-login').classList.remove('hidden-view');
-            
-            document.getElementById('login-btn-text').textContent = "Sign In";
-            stopFirebaseListener();
-        }
-
-        // 2. Terakhir, hilangkan Loading Screen setelah keputusan dibuat
-        // Kita kasih sedikit delay/animasi agar transisi halus (opsional)
-        if (loadingScreen && !loadingScreen.classList.contains('hidden-view')) {
-            setTimeout(() => {
-                loadingScreen.classList.add('opacity-0'); // Efek fade out (jika didukung CSS)
-                setTimeout(() => {
-                    loadingScreen.classList.add('hidden-view');
-                }, 300); // Waktu tunggu animasi fade out
-            }, 500); // Delay minimal agar loading tidak cuma kedip
-        }
-    });
-
-    function doLogin() {
-        const email = document.getElementById('login-email').value;
-        const pass = document.getElementById('login-pass').value;
-
-        if (!email || !pass) {
-            alert("Email dan Password tidak boleh kosong");
-            return;
-        }
-
-        const btn = document.getElementById('login-btn-text');
-        const err = document.getElementById('login-error');
-        
-        btn.textContent = "Signing In...";
-        err.classList.add('hidden');
-
-        auth.signInWithEmailAndPassword(email, pass)
-            .catch((error) => {
-                btn.textContent = "Sign In";
-                err.textContent = "Invalid Login: " + error.message;
-                err.classList.remove('hidden');
-            });
-    }
-
-    function doLogout() {
-        auth.signOut();
-        isAuthenticated = false;
-    }
-
-    // --- IDLE & VISIBILITY LOGIC ---
-    function resetIdleTimer() {
-        if (!isAuthenticated) return;                      // No need to track if not logged in
-
-        // 1. Clear existing timer
-        if (idleTimer) clearTimeout(idleTimer);
-
-        // 2. If we were paused/stopped and the tab is visible, wake up!
-        if (!isConnectionActive && !document.hidden) {
-            startFirebaseListener();
-        }
-
-        // 3. Set new timer: If no activity for 60s, Stop.
-        idleTimer = setTimeout(() => {
-            if (!document.hidden) { // Only log if we are looking at it
-                console.log("User inactive for 1 min. Disconnecting.");
-            }
-            stopFirebaseListener();
-        }, IDLE_TIMEOUT);
-    }
-
-    // Handle Tab Switching / Minimize
-    /* document.addEventListener("visibilitychange", () => {
-        if (document.hidden && isAuthenticated) {
-            // Immediately kill connection when tab is hidden
-            stopFirebaseListener(); 
-        } else if (!document.hidden && isAuthenticated) {
-            // Immediately restore connection when tab comes back
-            startFirebaseListener();
-            resetIdleTimer();
-        } else {
-            // Tab is visible but not authenticated
-            stopFirebaseListener();
-        }
-    }); */
-    
-    // Safety net: Ensures disconnection if the user closes the window/tab directly
-    window.addEventListener("pagehide", () => {
-        if (isAuthenticated) {
-            stopFirebaseListener();
-        }
-    });
-
-    function switchView(id) {
-        document.getElementById('view-dashboard').className = id==='dashboard'?'fade-in space-y-6':'hidden-view';
-        document.getElementById('view-history').className = id==='history'?'fade-in space-y-6':'hidden-view';
-        document.getElementById('view-firmware').className = id==='firmware'?'fade-in space-y-6':'hidden-view';
-        
-        // Update Buttons
-        const activeClass = "bg-solar-500 text-white shadow-md";
-        const inactiveClass = "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800";
-
-        if(id==='history') fetchDayLog();               // Auto fetch log when switched to history view
-        if(id==='firmware') fetchFirmwareInfo();        // Auto fetch firmware info when switched to firmware view
-        
-        document.getElementById('btn-dashboard').className = `px-4 py-2 rounded-md text-sm font-medium transition-all flex gap-2 items-center ${id==='dashboard'?activeClass:inactiveClass}`;
-        document.getElementById('btn-history').className = `px-4 py-2 rounded-md text-sm font-medium transition-all flex gap-2 items-center ${id==='history'?activeClass:inactiveClass}`;
-        document.getElementById('btn-firmware').className = `px-4 py-2 rounded-md text-sm font-medium transition-all flex gap-2 items-center ${id==='firmware'?activeClass:inactiveClass}`;
-    }
-
-    function startFirebaseListener() {
-        if (isConnectionActive) return;         // Prevent double connections
-
-        console.log("Starting Connection...");
-        firebase.database().goOnline(); // Ensure socket is open
-
-        const devStatus = document.getElementById('device-status');
-        const devDot = document.getElementById('conn-dot-device');
-        const statusEl = document.getElementById('connection-status');
-        const dotEl = document.getElementById('conn-dot');
-
-        // --- TAMBAHAN LISTENER STATUS PERANGKAT ---
-        db.ref('epever/is_online').on('value', (snapshot) => {
-            const isDeviceOnline = snapshot.val(); // true atau false
-            
-            // Update UI Dot Indikator Utama
-            if (isDeviceOnline === true) {
-                devStatus.textContent = "Device Online";
-                devStatus.className = "text-sm text-green-600 font-bold";
-                devDot.className = "inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse";
-            } else {
-                devStatus.textContent = "Device Offline";
-                devStatus.className = "text-sm text-red-600 font-bold";
-                devDot.className = "inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse";
-            }
-        });
-        // --- AKHIR TAMBAHAN ---
-        
-        db.ref('epever/live').on('value', (snapshot) => {
-            const data = snapshot.val();
-            if (!data) return;
-
-            // Update UI only if we are actually connected
-            statusEl.textContent = "Firebase Connected";
-            dotEl.className = "inline-block w-2 h-2 rounded-full bg-solar-500 animate-pulse";
-            updateUI(data);
-        });
-        isConnectionActive = true;
-    }
-
-    function stopFirebaseListener() {
-        if (!isConnectionActive) return;
-
-        console.log("Stopping Connection (Idle/Background)...");
-
-        // 1. Remove listeners to stop callbacks
-        db.ref('epever/live').off();
-
-        // 2. Kill the WebSocket to save bandwidth/battery immediately
-        firebase.database().goOffline();
-
-        const statusEl = document.getElementById('connection-status');
-        const dotEl = document.getElementById('conn-dot');
-        statusEl.textContent = "Paused (Idle)"; 
-        dotEl.className = "inline-block w-2 h-2 rounded-full bg-yellow-500";
-
-        isConnectionActive = false;
-    }
-
-    function updateUI(data) {
-        lastPacketTime = Date.now(); // reset when packet received
-
-        const statusLabel = getStatusLabel(data.status_code);
-        const statusEl = document.getElementById('charging-stage-display');
-        statusEl.textContent = statusLabel.text;
-        statusEl.className = `text-lg font-bold mt-1 ${statusLabel.color}`;
-
-        document.getElementById('panel-power').textContent = data.pv.power.toFixed(2);
-        document.getElementById('pv-bar').style.width = Math.min((data.pv.power/500)*100, 100) + "%";
-        document.getElementById('battery-voltage').textContent = data.batt.volt.toFixed(2);
-        document.getElementById('load-power').textContent = data.load.power.toFixed(2);
-        document.getElementById('gauge-soc-text').textContent = Math.round(data.batt.soc) + "%";
-        document.getElementById('detail-pv-volt').textContent = data.pv.volt.toFixed(2);
-        document.getElementById('detail-chg-amp').textContent = data.batt.amps.toFixed(2);
-        document.getElementById('detail-temp').textContent = data.temp.toFixed(1);
-        document.getElementById('detail-daily-energy').textContent = data.daily_kwh.toFixed(2);
-        
-        const offset = 282.7 - ((data.batt.soc/100) * 282.7);
-        const ring = document.querySelector('.gauge-ring');
-        if(ring) { ring.style.strokeDashoffset = offset; ring.style.stroke = data.batt.soc < 30 ? "#ef4444" : "#22c55e"; }
-        else console.error("Gauge ring element not found");
-
-        if(liveChartInstance){
-            livePVData.push(data.pv.power); livePVData.shift(); liveChartInstance.update('none');
-        }
-
-        // Cek selisih waktu sekarang vs waktu data terakhir (timestamp dari ESP32)
-        const now = Date.now() / 1000; // Detik sekarang
-        const dataTime = data.timestamp || 0; 
-        const diff = now - dataTime;
-
-        // Kalau data telat lebih dari 60 detik, anggap hang. 120 detik, set is_online ke false di database.
-        if (diff > 120) {
-            document.getElementById('device-status').textContent = "Device Offline";
-            document.getElementById('device-status').className = "text-sm text-red-600 font-bold";
-            document.getElementById('conn-dot-device').className = "inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse";
-            db.ref('epever/is_online').set(false)
-                .catch((error) => console.error("Gagal update DB:", error));
-        } else if (diff > 60) {
-            document.getElementById('device-status').textContent = "Device Probably Offline";
-            document.getElementById('device-status').className = "text-sm text-orange-600 font-bold";
-            document.getElementById('conn-dot-device').className = "inline-block w-2 h-2 rounded-full bg-orange-500 animate-bounce";
-        } else {
-            document.getElementById('device-status').textContent = "Device Online";
-            document.getElementById('device-status').className = "text-sm text-green-600 font-bold";
-            document.getElementById('conn-dot-device').className = "inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse";
-            db.ref('epever/is_online').set(true)
-                .catch((error) => console.error("Gagal update DB:", error));
-        }
-    }
-
-    function initCharts() {
-        const ctx = document.getElementById('liveChart');
-        if(ctx) liveChartInstance = new Chart(ctx, { type: 'line', data: { labels: liveLabels, datasets: [{ label: 'PV (W)', data: livePVData, borderColor: '#0ea5e9', backgroundColor: '#0ea5e933', fill: true, tension: 0.4, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: {display:false} }, scales: { x: { display: false }, y: { beginAtZero: true } } } });
-    }
-
-    // --- Helper to Decode Epever Status Code ---
-    // Extract Bits 3-2 for Charging Status
-    function getStatusLabel(code) {
-        if(code === undefined || code === null) return "-";
-        const chgState = (code >> 2) & 0x03;
-        const voltState = (code >> 14) & 0x03
-        if(voltState===1)return{text:"OVP",color:"text-red-500"};
-        if(code&0x8000)return{text:"Fault",color:"text-red-600"};;
-        switch(chgState) {
-            case 0: return{text:"Standby",color:"text-gray-400"};
-            case 1: return{text:"Float",color:"text-solar-500"};
-            case 2: return{text:"Boost",color:"text-orange-500"};
-            case 3: return{text:"Equalize",color:"text-blue-500"};
-            default: return{text:"Active",color:"text-green-500"};
-        }
-    }
-
-    // --- DAY CHART MANAGEMENT ---
-    function getDayChartInstance(chartLabels = [], chartData = []) {
-        const ctxDay = document.getElementById('dayChart');
-        if (!ctxDay) {
-            console.warn("Chart skipped: canvas element not found");
-            return;
-        }
-
-        if (!dayChartInstance) {
-            try {
-                dayChartInstance = new Chart(ctxDay, { 
-                    type: 'bar', 
-                    data: { labels: [], datasets: [{ label: 'Power (W)', data: [], backgroundColor: '#f97316' }] }, 
-                    options: { responsive: true, maintainAspectRatio: false } 
-                });
-            } catch (e) {
-                console.error("Chart init failed:", e);
-                return;
-            }
-        }
-
-        const chart = dayChartInstance;
-        if (chart) {
-            chart.data.labels = chartLabels;
-            chart.data.datasets[0].data = chartData;
-            chart.update();
-        } else {
-            console.warn("Chart skipped: could not initialize canvas");
-        }
-    }
-
-    // --- HISTORY LOG FETCHING ---
-    function fetchDayLog() {
-        const dateInput = document.getElementById('logDateSelector').value;
-        if(!dateInput) return alert("Select a date");
-
-        const startTs = new Date(dateInput).getTime() / 1000;       // Start of selected day in seconds
-        const endTs = startTs + 86400;                              // End of selected day in seconds
-
-        const tbody = document.getElementById('detail-table-body');
-        tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center">Loading...</td></tr>';
-
-        db.ref('epever/history').orderByChild('hStamp').startAt(startTs).endAt(endTs).once('value')
-        .then(snapshot => {
-            const data = snapshot.val();
-            fetchedLogData = []; 
-
-            let html = '';
-            let chartLabels = [];
-            let chartData = [];
-            
-            if(!data) {
-                tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center">No data found for this date</td></tr>';
-                getDayChartInstance(chartLabels, chartData); // Clear chart
-                return;
-            }
-
-            const logs = Object.values(data).sort((a,b) => b.hStamp - a.hStamp);
-
-            logs.forEach(log => {
-                const dateObj = new Date(log.hStamp * 1000);    // Convert to milliseconds
-                const timeStr = dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); // Format HH:MM
-                const statusStr = getStatusLabel(log.hCCode); // Decode 'hCCode' from DB
-                const statusStrEL = `<span class="px-2 py-1 rounded text-xs font-bold bg-gray-100 ${statusStr.color}">${statusStr.text}</span>`;
-                fetchedLogData.push({ time: timeStr, ...log }); 
-
-                html += `<tr class="hover:bg-gray-50 dark:hover:bg-slate-800">
-                    <td class="px-6 py-4">${timeStr}</td>
-                    <td class="px-6 py-4">${statusStrEL}</td>
-                    <td class="px-6 py-4 text-right">${log.hPWatt} W</td>
-                    <td class="px-6 py-4 text-right">${log.hBVolt} V</td>
-                    <td class="px-6 py-4 text-right">${log.hBSOC}%</td>
-                </tr>`;
-
-                chartLabels.push(timeStr);
-                chartData.push(log.hPWatt);
-            });
-            tbody.innerHTML = html;
-            chartLabels.reverse();
-            chartData.reverse();
-
-            getDayChartInstance(chartLabels, chartData); // Update chart
-        })
-        .catch(err => {
-            console.error(err);
-            tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-red-500">Error: ${err.message}</td></tr>`;
-        });
-    }
-
-    // --- DOWNLOAD LOG AS CSV ---
-    function downloadLog() {
-        if(fetchedLogData.length === 0) return alert("No data to download. Search for a date first.");
-        
-        let csvContent = "data:text/csv;charset=utf-8,Time,Status,Power(W),Battery(V),SOC(%)\n";
-        fetchedLogData.forEach(row => {
-            const stCode = getStatusLabel(row.hCCode); // Decode 'hCCode' from DB
-            csvContent += `${row.time},${stCode},${row.hPWatt},${row.hBVolt},${row.hBSOC}\n`;
-        });
-
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", "solar_log.csv");
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
-
-    // --- FIRMWARE INFO FETCHING ---
-    function fetchFirmwareInfo() {
-        db.ref('/epever/firmware_info').once('value').then(snapshot => {
-            const info = snapshot.val();
-            if (!info) return alert("No firmware info available.");
-            document.getElementById('fw-version').textContent = info.firmware_version || '--';
-            document.getElementById('fw-date').textContent = info.firmware_date || '--';
-            document.getElementById('fw-chip').textContent = info.chip_model || '--';
-            document.getElementById('fw-free').textContent = info.free_space ? info.free_space + ' bytes' : '--';
-        }).catch(e => alert("Error fetching firmware info: " + e.message));
-    }
-
-    // --- FIRMWARE UPLOAD LOGIC ---
-    let selectedFile = null;
-    function handleDrop(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.currentTarget.classList.remove('bg-gray-100');
-        if (e.dataTransfer.files.length && e.dataTransfer.files[0].name.endsWith('.bin')) {
-            selectedFile = e.dataTransfer.files[0];
-            document.getElementById('fw-message').textContent = `Selected: ${selectedFile.name}`;
-            document.getElementById('fw-message').className = 'text-xs text-center text-green-600 dark:text-green-400';
-        } else {
-            document.getElementById('fw-message').textContent = 'Please drop a .bin file';
-            document.getElementById('fw-message').className = 'text-xs text-center text-red-600';
-        }
-    }
-
-    function handleFileSelect(event) {
-        const file = event.target.files[0];
-        if (file && file.name.endsWith('.bin')) {
-            selectedFile = file;
-            document.getElementById('fw-message').textContent = `Selected: ${file.name}`;
-            document.getElementById('fw-message').className = "text-xs text-center text-green-600 font-bold mt-2";
-        } else {
-            alert("Please select a .bin file!");
-            selectedFile = null;
-        }
-    }
-
-    function uploadFirmware() {
-        if(!selectedFile) return alert("Select file first!");
-        
-        const btn = document.getElementById('fw-upload-btn');
-        const statusDiv = document.getElementById('fw-upload-status');
-        const statusText = document.getElementById('fw-status-text');
-        const progressBar = document.getElementById('fw-progress-bar');
-        
-        btn.disabled = true;
-        statusDiv.classList.remove('hidden');
-        statusText.textContent = "Uploading to Cloud...";
-
-        // 1. Upload ke Storage dengan nama "firmware.bin" (fixed name agar ESP32 mudah download)
-        const storageRef = storage.ref('firmware.bin');
-        const task = storageRef.put(selectedFile);
-
-        task.on('state_changed', 
-            (snapshot) => {
-                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                progressBar.style.width = progress + "%";
-            }, 
-            (error) => {
-                console.error(error);
-                alert("Upload Failed: " + error.message);
-                btn.disabled = false;
-            }, 
-            () => {
-                // 2. Upload Sukses -> Trigger ESP32
-                statusText.textContent = "Flashing Device...";
-                progressBar.style.width = "100%";
-                
-                // Set flag di database
-                db.ref('epever/firmware_info/ota_trigger').set(true)
-                .then(() => {
-                    alert("Success! Device will restart shortly.");
-                    btn.disabled = false;
-                    statusDiv.classList.add('hidden');
-                    selectedFile = null;
-                    document.getElementById('fw-message').textContent = "";
-                })
-                .catch(e => alert("DB Error: " + e.message));
-            }
-        );
-    }
-</script>
 </body>
 </html>

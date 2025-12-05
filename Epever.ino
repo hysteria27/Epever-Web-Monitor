@@ -2,6 +2,8 @@
 #include <Firebase_ESP_Client.h>
 #include <ModbusMaster.h>
 #include <ArduinoJson.h>
+#include <ESPAsyncWebServer.h>
+#include <WebSerial.h>
 #include "time.h" // Added for Real Time
 #include "config.h"
 
@@ -17,21 +19,17 @@ FirebaseConfig config;
 ModbusMaster node;
 
 // --- FIRMWARE INFO ---
-const char* FIRMWARE_VERSION = "1.0.9";
+const char* FIRMWARE_VERSION = "1.1.0";
 const char* NTP_SERVER = "pool.ntp.org";
 const long  GMT_OFFSET_SEC = 25200; // WIB (UTC+7) = 7 * 3600
 const int   DAYLIGHT_OFFSET_SEC = 0;
 
 unsigned long lastUpdate = 0;
 const int UPDATE_INTERVAL = 5000; // Update Live Data every 5s
-
+unsigned long lastOTACheck = 0;
+const int OTA_CHECK_INTERVAL = 60000; // Check OTA every 60s
 unsigned long lastHistoryUpdate = 0;
 const int HISTORY_INTERVAL = 15 * 60 * 1000; // Save History every 15 mins
-
-// --- EPEVER PIN CONFIG ---
-#define RS485_DE_RE_PIN 2     
-#define RX_PIN 16
-#define TX_PIN 17
 
 // --- REGISTERS ---
 // Real-time Data (Read Only)
@@ -66,16 +64,18 @@ const uint16_t REG_LOW_VOLT_DISCONNECT  = 0x900D;
 const uint16_t REG_DISCHARGE_LIMIT_VOLT = 0x900E;
 
 struct EpeverData {
-  bool connected; // Modbus connection status
+  bool connected;                             // Flag modbus connection status
   float pvVolt, pvAmps, pvPower;
-  float battVolt, chgAmps, battSOC;
+  float battVolt, chgAmps, chgPower, battSOC;
   float loadVolt, loadAmps, loadPower;
   float temp, dailyEnergy;
   uint16_t status;
 };
 EpeverData live;
 
-// Get Unix Timestamp
+AsyncWebServer webLog(8632);
+
+// --- Get Unix Timestamp ---
 time_t getTimestamp() {
   struct tm timeinfo;
   if(!getLocalTime(&timeinfo)){
@@ -92,15 +92,15 @@ void postTransmission() { digitalWrite(RS485_DE_RE_PIN, LOW); delay(1); }
 // --- CALLBACK OTA ---
 void fcsDownloadCallback(FCS_DownloadStatusInfo info) {
     if (info.status == fb_esp_fcs_download_status_init) {
-        Serial.println("Downloading Firmware...");
+        WebSerial.println("Downloading Firmware...");
     } else if (info.status == fb_esp_fcs_download_status_download) {
-        Serial.printf("Progress: %d%%\n", info.progress);
+        WebSerial.printf("Progress: %d%%\n", info.progress);
     } else if (info.status == fb_esp_fcs_download_status_complete) {
-        Serial.println("Download Success! Restarting...");
+        WebSerial.println("Download Success! Restarting...");
         delay(2000);
         ESP.restart();
     } else if (info.status == fb_esp_fcs_download_status_error) {
-        Serial.printf("Download Failed: %s\n", info.errorMsg.c_str());
+        WebSerial.printf("Download Failed: %s\n", info.errorMsg.c_str());
     }
 }
 
@@ -114,20 +114,28 @@ void setup() {
   while (WiFi.status() != WL_CONNECTED) {
     Serial.print(".");
     delay(500);
-    // Cek apakah sudah melebihi waktu tunggu maksimal (30 detik)
+    // Cek apakah sudah melebihi waktu tunggu maksimal
     if (millis() - startWifiAttemptTime > 900000) { // 15 menit
       Serial.println("\n\nGagal terhubung ke WiFi dalam 15 menit.");
       Serial.println("Mematikan perangkat (Deep Sleep)...");
-      esp_deep_sleep_start(); // OPSI 1: Matikan selamanya (sampai tombol RESET ditekan manual)
-      // OPSI 2: Tidur sebentar lalu coba lagi (misal tidur 1 jam)
-      // esp_sleep_enable_timer_wakeup(3600ULL * 1000000ULL); // 3600 detik = 1 jam
-      // esp_deep_sleep_start();
+
+      // Masuk ke mode deep sleep untuk menghemat daya
+      esp_sleep_enable_timer_wakeup(3600ULL * 1000000ULL); // 3600 detik = 1 jam
+      esp_deep_sleep_start();
     }
   }
-  Serial.println(" Connected!");
+  Serial.print("Web Logging started: ");
+  Serial.print(WiFi.localIP());
+  Serial.println(":8632/webserial");
+
+  WebSerial.begin(&webLog);
+  webLog.on("/", HTTP_GET, [](AsyncWebServerRequest *request){request->redirect("/webserial");});
+  webLog.begin();
+  WebSerial.println("WiFi Connected!");
   
-  pinMode(RS485_DE_RE_PIN, OUTPUT); digitalWrite(RS485_DE_RE_PIN, LOW);
   Serial2.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);
+  pinMode(RS485_DE_RE_PIN, OUTPUT);
+  digitalWrite(RS485_DE_RE_PIN, LOW);
   node.begin(1, Serial2);
   node.preTransmission(preTransmission);
   node.postTransmission(postTransmission);
@@ -155,10 +163,6 @@ void setup() {
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
 
-  if (Firebase.ready()) {
-    Serial.println("Firebase Realtime Database Connected");
-    Firebase.RTDB.setBool(&fbDO, "/epever/is_online", true);  // Set online status
-  }
   checkFirmware();
 }
 
@@ -174,13 +178,13 @@ void checkFirmware() {
 
 void checkOTA() {
   if (!Firebase.ready()) return;
-  // Use getBool with a smaller timeout if possible or check infrequently
+  
   if (Firebase.RTDB.getBool(&fbDO, "epever/firmware_info/ota_trigger")) {
     if (fbDO.boolData() == true) {
-      Serial.println("\n--- OTA TRIGGER RECEIVED ---");
+      WebSerial.println("\n--- OTA TRIGGER RECEIVED ---");
       Firebase.RTDB.setBool(&fbDO, "epever/firmware_info/ota_trigger", false);
       if (!Firebase.Storage.downloadOTA(&fbOTA, STORAGE_BUCKET_ID, "firmware.bin", fcsDownloadCallback)) {
-        Serial.println(fbOTA.errorReason());
+        WebSerial.println(fbOTA.errorReason());
       }
     }
   }
@@ -243,58 +247,139 @@ void readSensors() {
   delay(5);
 }
 
-void loop() {
-  checkOTA();
+void readSensors2() {
+  static uint8_t step = 0;
+  uint16_t reg = 0x3100;
+  int result;
+  switch (step) {
+    case 0: // PV Voltage, Current, Power, Battery Voltage, Charge Current, Charge Power (8 Registers: V1)
+      reg = 0x3100;
+      result = node.readInputRegisters(reg, 8);
+      if (result == node.ku8MBSuccess) {
+        float pvVolt    = node.getResponseBuffer(0) / 100.0f;
+        float pvAmp     = node.getResponseBuffer(1) / 100.0f;
+        float pvWatt    = ((uint32_t)node.getResponseBuffer(2) | ((uint32_t)node.getResponseBuffer(3) << 16)) / 100.0f;
+        float battVolt  = node.getResponseBuffer(4) / 100.0f;
+        float chgAmp    = node.getResponseBuffer(5) / 100.0f;
+        float chgWatt   = ((uint32_t)node.getResponseBuffer(6) | ((uint32_t)node.getResponseBuffer(7) << 16)) / 100.0f;
 
-  // 1. Live Data Update (Fast)
-  if (millis() - lastUpdate > UPDATE_INTERVAL) {
-    lastUpdate = millis();
+        // --- Print ke WebSerial dengan format String Concatenation ---
+        WebSerial.println("PV Volt: "   + String(pvVolt)    + " V");
+        WebSerial.println("PV Amp: "    + String(pvAmp)     + " A");
+        WebSerial.println("PV Watt: "   + String(pvWatt)    + " W");
+        WebSerial.println("Bat Volt: "  + String(battVolt)  + " V");
+        WebSerial.println("Chg Amp: "   + String(chgAmp)    + " A");
+        WebSerial.println("Chg Watt: "  + String(chgWatt)   + " W");
+
+        /* // --- Simpan ke Struct 'live' (Sesuai kode Anda sebelumnya) ---
+        live.pvVolt   = pvVolt;
+        live.pvAmps   = pvAmp;
+        live.pvPower  = pvWatt;
+        live.battVolt = battVolt;
+        live.chgAmps  = chgAmp;
+        live.chgPower = chgWatt; */
+      } else WebSerial.println("Error reading registers at 0x" + String(reg, HEX) + ": " + String(result));
+      step++;
+    break;
+
+    case 1:
+      reg = 0x310C;
+      result = node.readInputRegisters(reg, 8);
+      if (result == node.ku8MBSuccess) {
+        float loadVolt    = node.getResponseBuffer(0) / 100.0f;
+        float loadAmp     = node.getResponseBuffer(1) / 100.0f;
+        float loadWatt    = ((uint32_t)node.getResponseBuffer(2) | ((uint32_t)node.getResponseBuffer(3) << 16)) / 100.0f;
+        float battTemp    = node.getResponseBuffer(4) / 100.0f;
+        float deviceTemp  = node.getResponseBuffer(5) / 100.0f;
+        float powerTemp   = node.getResponseBuffer(6) / 100.0f;
+        float soc         = node.getResponseBuffer(7) / 100.0f;
+
+        // --- Print ke WebSerial dengan format String Concatenation ---
+        WebSerial.println("Load Volt: "                   + String(loadVolt)    + " V");
+        WebSerial.println("Load Amp: "                    + String(loadAmp)     + " A");
+        WebSerial.println("Load Watt: "                   + String(loadWatt)    + " W");
+        WebSerial.println("Battery Temperature: "         + String(battTemp)    + " °C");
+        WebSerial.println("Device Temperature: "          + String(deviceTemp)  + " °C");
+        WebSerial.println("Power Component Temperature: " + String(powerTemp)   + " °C");
+        WebSerial.println("Battery SOC: "                 + String(soc)         + " %");
+      } else WebSerial.println("Error reading registers at 0x" + String(reg, HEX) + ": " + String(result));
+      step++;
+    break;
+
+    case 2:
+      reg = 0x311D;
+      result = node.readInputRegisters(reg, 1);
+      if (result == node.ku8MBSuccess) {
+        float ratedPower = node.getResponseBuffer(0) / 100.0f;
+        WebSerial.println("Rated Power: " + String(ratedPower) + " V");
+      } else WebSerial.println("Error reading registers at 0x" + String(reg, HEX) + ": " + String(result));
+      step++;
+    break;
+  }
+}
+
+void loop() {
+  unsigned long currentMillis = millis();
+
+  // --- 1. Live Data Update (Fast) ---
+  if (currentMillis - lastUpdate > UPDATE_INTERVAL) {
+    lastUpdate = currentMillis;
     readSensors();
+    readSensors2();
     
-    if (Firebase.ready()) {
-      time_t now = getTimestamp();
+    if (Firebase.ready() && live.connected) {
+      time_t now = getTimestamp();     
       
+      Firebase.RTDB.setBool(&fbDO, "/epever/is_online", true);  // Set device online status 
       FirebaseJson json;
-      json.set("isConnected", live.connected); // Modbus Connection Status
-      json.set("pv/volt", live.pvVolt); // PV Voltage
-      json.set("pv/amps", live.pvAmps); // PV Current
-      json.set("pv/power", live.pvPower); // PV Power
-      json.set("batt/volt", live.battVolt); // Battery Voltage
-      json.set("batt/amps", live.chgAmps); // Charge Current
-      json.set("batt/soc", live.battSOC); // Battery SOC
-      json.set("load/power", live.loadPower); // Load Power
-      json.set("load/amps", live.loadAmps); // Load Current
-      json.set("temp", live.temp); // Temperature
-      json.set("daily_kwh", live.dailyEnergy); // Daily Energy
-      json.set("status_code", live.status); // Status Code
-      
-      // Use Real Timestamp if available, else millis
-      if(now > 10000) json.set("timestamp", (int)now);
-      else json.set("timestamp", millis());
-      
-      Firebase.RTDB.setJSON(&fbDO, "/epever/live", &json);
-    }
+      if (now > 10000) {
+        json.set("timestamp", (int)now);          // Timestamp
+        json.set("isConnected", live.connected);  // Modbus Connection Status
+        json.set("pv/volt", live.pvVolt);         // PV Voltage
+        json.set("pv/amps", live.pvAmps);         // PV Current
+        json.set("pv/power", live.pvPower);       // PV Power
+        json.set("batt/volt", live.battVolt);     // Battery Voltage
+        json.set("batt/amps", live.chgAmps);      // Charge Current
+        json.set("batt/soc", live.battSOC);       // Battery SOC
+        json.set("load/power", live.loadPower);   // Load Power
+        json.set("load/amps", live.loadAmps);     // Load Current
+        json.set("temp", live.temp);              // Temperature
+        json.set("daily_kwh", live.dailyEnergy);  // Daily Energy
+        json.set("status_code", live.status);     // Status Code
+        
+        Firebase.RTDB.setJSON(&fbDO, "/epever/live", &json);
+      }
+      WebSerial.println("Live Data Updated");
+    } else WebSerial.println("Skipping Live Data Update - MODBUS Disconnected");
   }
 
-  // 2. History Data Update (Slow - Every 15 mins)
-  if (millis() - lastHistoryUpdate > HISTORY_INTERVAL) {
-    lastHistoryUpdate = millis();
+  // --- 2. OTA CHECK (Low Priority: 60s) ---
+  // Checking every 60s is plenty. It frees up bandwidth for the sensors.
+  if (currentMillis - lastOTACheck > OTA_CHECK_INTERVAL) {
+    lastOTACheck = currentMillis;
+    checkOTA(); 
+  }
+
+  // --- 3. History Data Update (Slow - Every 15 mins) ---
+  if (currentMillis - lastHistoryUpdate > HISTORY_INTERVAL) {
+    lastHistoryUpdate = currentMillis;
+    readSensors();
     
-    if (Firebase.ready()) {
+    if (Firebase.ready() && live.connected) {
       time_t now = getTimestamp();
       if (now > 10000) {
         FirebaseJson hist;
-        hist.set("hStamp", (int)now); // Timestamp
-        hist.set("hCCode", live.status); // Status Code
-        hist.set("hPWatt", live.pvPower); // Power
-        hist.set("hBVolt", live.battVolt); // Battery
-        hist.set("hBSOC", live.battSOC);  // SOC
+        hist.set("hStamp", (int)now);           // Timestamp
+        hist.set("hCCode", live.status);        // Status Code
+        hist.set("hPWatt", live.pvPower);       // Power
+        hist.set("hBVolt", live.battVolt);      // Battery
+        hist.set("hBSOC", live.battSOC);        // SOC
         hist.set("hDayWatt", live.dailyEnergy); // Daily Energy
         
         // Push adds a new unique node to the list
         Firebase.RTDB.pushJSON(&fbHist, "/epever/history", &hist);
-        Serial.println("History Log Pushed");
+        WebSerial.println("History Log Pushed");
       }
-    }
+    } else WebSerial.println("Skipping History Log - MODBUS Disconnected");
   }
 }
