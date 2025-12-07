@@ -19,7 +19,7 @@ FirebaseConfig config;
 ModbusMaster node;
 
 // --- FIRMWARE INFO ---
-const char* FIRMWARE_VERSION = "1.1.0";
+const char* FIRMWARE_VERSION = "1.2.2";
 const char* NTP_SERVER = "pool.ntp.org";
 const long  GMT_OFFSET_SEC = 25200; // WIB (UTC+7) = 7 * 3600
 const int   DAYLIGHT_OFFSET_SEC = 0;
@@ -43,7 +43,8 @@ const uint16_t REG_LOAD_CURRENT       = 0x310D;
 const uint16_t REG_LOAD_POWER_L       = 0x310E; 
 const uint16_t REG_TEMP_CTRL          = 0x3111;
 const uint16_t REG_BAT_SOC            = 0x311A;
-const uint16_t REG_STATUS             = 0x3201;  // Charging Equip. Status
+const uint16_t REG_BATTERY_STATUS     = 0x3200;  
+const uint16_t REG_CHARGING_STATUS    = 0x3201;  
 const uint16_t REG_DAILY_ENERGY_L     = 0x330C;
 const uint16_t REG_MAX_BATTERY_VOLT   = 0x3302;
 // Parameter Settings (Read/Write)
@@ -66,12 +67,19 @@ const uint16_t REG_DISCHARGE_LIMIT_VOLT = 0x900E;
 struct EpeverData {
   bool connected;                             // Flag modbus connection status
   float pvVolt, pvAmps, pvPower;
-  float battVolt, chgAmps, chgPower, battSOC;
+  float battVolt, chgAmps, chgPower, soc;
   float loadVolt, loadAmps, loadPower;
-  float temp, dailyEnergy;
-  uint16_t status;
+  float dailyEnergy, monthlyEnergy, yearlyEnergy, totalEnergy;
+  uint16_t battTemp, deviceTemp, powerTemp;
+  uint16_t battState, chargingState;
+
+  uint16_t battType, battCap, tempComp;
+  float hVoltDisc, chgLimitVolt, overVoltRec;
+  float eqVolt, boostVolt, floatVolt;
+  float boostRecVolt, lowVoltRec, underVoltRecover;
+  float underVoltWarn, lowVoltDisc, dischLimitVolt;
 };
-EpeverData live;
+EpeverData epever;
 
 AsyncWebServer webLog(8632);
 
@@ -173,7 +181,7 @@ void checkFirmware() {
   json.set("firmware_date", __DATE__ " " __TIME__);
   json.set("chip_model", ESP.getChipModel());
   json.set("free_space", (int)ESP.getFreeSketchSpace());
-  Firebase.RTDB.setJSON(&fbDO, "/epever/firmware_info", &json);
+  Firebase.RTDB.setJSON(&fbDO, "epever/firmware_info", &json);
 }
 
 void checkOTA() {
@@ -191,130 +199,124 @@ void checkOTA() {
 }
 
 void readSensors() {
-  uint8_t result;
-  result = node.readInputRegisters(REG_STATUS, 1);
-  if (result == node.ku8MBSuccess) {
-    live.status = node.getResponseBuffer(0);
-    live.connected = true;
-  } else {
-    live.status = 0;
-    live.connected = false;
-    return; // Skip reading other registers if not connected
-  }
-  
-  node.readInputRegisters(REG_PV_VOLTAGE, 1);
-  live.pvVolt = node.getResponseBuffer(0) / 100.0f;
-  delay(5);
-
-  node.readInputRegisters(REG_PV_CURRENT, 1);
-  live.pvAmps = node.getResponseBuffer(0) / 100.0f;
-  delay(5);
-
-  node.readInputRegisters(REG_PV_POWER_L, 2);
-  live.pvPower = ((uint32_t)node.getResponseBuffer(0) | ((uint32_t)node.getResponseBuffer(1) << 16)) / 100.0f;
-  delay(5);
-
-  node.readInputRegisters(REG_BAT_VOLTAGE, 1);
-  live.battVolt = node.getResponseBuffer(0) / 100.0f;
-  delay(5);
-
-  node.readInputRegisters(REG_CHARGE_CURRENT, 1);
-  live.chgAmps = node.getResponseBuffer(0) / 100.0f;
-  delay(5);
-
-  node.readInputRegisters(REG_LOAD_VOLTAGE, 1);
-  live.loadVolt = node.getResponseBuffer(0) / 100.0f;
-  delay(5);
-
-  node.readInputRegisters(REG_LOAD_CURRENT, 1);
-  live.loadAmps = node.getResponseBuffer(0) / 100.0f;
-  delay(5);
-
-  node.readInputRegisters(REG_LOAD_POWER_L, 2);
-  live.loadPower = ((uint32_t)node.getResponseBuffer(0) | ((uint32_t)node.getResponseBuffer(1) << 16)) / 100.0f;
-  delay(5);
-
-  node.readInputRegisters(REG_TEMP_CTRL, 1);
-  live.temp = node.getResponseBuffer(0) / 100.0f;
-  delay(5);
-
-  node.readInputRegisters(REG_BAT_SOC, 1);
-  live.battSOC = node.getResponseBuffer(0);
-  delay(5);
-
-  node.readInputRegisters(REG_DAILY_ENERGY_L, 2);
-  live.dailyEnergy = ((uint32_t)node.getResponseBuffer(0) | ((uint32_t)node.getResponseBuffer(1) << 16)) / 100.0f;
-  delay(5);
-}
-
-void readSensors2() {
   static uint8_t step = 0;
   uint16_t reg = 0x3100;
   int result;
   switch (step) {
-    case 0: // PV Voltage, Current, Power, Battery Voltage, Charge Current, Charge Power (8 Registers: V1)
+    case 0:
       reg = 0x3100;
       result = node.readInputRegisters(reg, 8);
       if (result == node.ku8MBSuccess) {
-        float pvVolt    = node.getResponseBuffer(0) / 100.0f;
-        float pvAmp     = node.getResponseBuffer(1) / 100.0f;
-        float pvWatt    = ((uint32_t)node.getResponseBuffer(2) | ((uint32_t)node.getResponseBuffer(3) << 16)) / 100.0f;
-        float battVolt  = node.getResponseBuffer(4) / 100.0f;
-        float chgAmp    = node.getResponseBuffer(5) / 100.0f;
-        float chgWatt   = ((uint32_t)node.getResponseBuffer(6) | ((uint32_t)node.getResponseBuffer(7) << 16)) / 100.0f;
-
-        // --- Print ke WebSerial dengan format String Concatenation ---
-        WebSerial.println("PV Volt: "   + String(pvVolt)    + " V");
-        WebSerial.println("PV Amp: "    + String(pvAmp)     + " A");
-        WebSerial.println("PV Watt: "   + String(pvWatt)    + " W");
-        WebSerial.println("Bat Volt: "  + String(battVolt)  + " V");
-        WebSerial.println("Chg Amp: "   + String(chgAmp)    + " A");
-        WebSerial.println("Chg Watt: "  + String(chgWatt)   + " W");
-
-        /* // --- Simpan ke Struct 'live' (Sesuai kode Anda sebelumnya) ---
-        live.pvVolt   = pvVolt;
-        live.pvAmps   = pvAmp;
-        live.pvPower  = pvWatt;
-        live.battVolt = battVolt;
-        live.chgAmps  = chgAmp;
-        live.chgPower = chgWatt; */
+        epever.pvVolt   = node.getResponseBuffer(0) / 100.0f;
+        epever.pvAmps   = node.getResponseBuffer(1) / 100.0f;
+        epever.pvPower  = ((uint32_t)node.getResponseBuffer(2) | ((uint32_t)node.getResponseBuffer(3) << 16)) / 100.0f;
+        epever.battVolt = node.getResponseBuffer(4) / 100.0f;
+        epever.chgAmps  = node.getResponseBuffer(5) / 100.0f;
+        epever.chgPower = ((uint32_t)node.getResponseBuffer(6) | ((uint32_t)node.getResponseBuffer(7) << 16)) / 100.0f;
       } else WebSerial.println("Error reading registers at 0x" + String(reg, HEX) + ": " + String(result));
       step++;
     break;
 
-    case 1:
+    case 1: {
       reg = 0x310C;
-      result = node.readInputRegisters(reg, 8);
+      result = node.readInputRegisters(reg, 4);
       if (result == node.ku8MBSuccess) {
-        float loadVolt    = node.getResponseBuffer(0) / 100.0f;
-        float loadAmp     = node.getResponseBuffer(1) / 100.0f;
-        float loadWatt    = ((uint32_t)node.getResponseBuffer(2) | ((uint32_t)node.getResponseBuffer(3) << 16)) / 100.0f;
-        float battTemp    = node.getResponseBuffer(4) / 100.0f;
-        float deviceTemp  = node.getResponseBuffer(5) / 100.0f;
-        float powerTemp   = node.getResponseBuffer(6) / 100.0f;
-        float soc         = node.getResponseBuffer(7) / 100.0f;
-
-        // --- Print ke WebSerial dengan format String Concatenation ---
-        WebSerial.println("Load Volt: "                   + String(loadVolt)    + " V");
-        WebSerial.println("Load Amp: "                    + String(loadAmp)     + " A");
-        WebSerial.println("Load Watt: "                   + String(loadWatt)    + " W");
-        WebSerial.println("Battery Temperature: "         + String(battTemp)    + " °C");
-        WebSerial.println("Device Temperature: "          + String(deviceTemp)  + " °C");
-        WebSerial.println("Power Component Temperature: " + String(powerTemp)   + " °C");
-        WebSerial.println("Battery SOC: "                 + String(soc)         + " %");
+        epever.loadVolt    = node.getResponseBuffer(0) / 100.0f;
+        epever.loadAmps    = node.getResponseBuffer(1) / 100.0f;
+        epever.loadPower   = ((uint32_t)node.getResponseBuffer(2) | ((uint32_t)node.getResponseBuffer(3) << 16)) / 100.0f;
       } else WebSerial.println("Error reading registers at 0x" + String(reg, HEX) + ": " + String(result));
       step++;
-    break;
+    } break;
 
-    case 2:
-      reg = 0x311D;
-      result = node.readInputRegisters(reg, 1);
+    case 2: {
+      result = node.readInputRegisters(REG_BAT_SOC, 1); // REG 0x311A
       if (result == node.ku8MBSuccess) {
-        float ratedPower = node.getResponseBuffer(0) / 100.0f;
-        WebSerial.println("Rated Power: " + String(ratedPower) + " V");
+        epever.soc = node.getResponseBuffer(0);
+      } else WebSerial.println("Error reading registers at 0x" + String(REG_BAT_SOC, HEX) + ": " + String(result));
+      step++;
+    } break;
+
+    case 3: {
+      result = node.readInputRegisters(REG_BATTERY_STATUS, 2); // REG 0x3200-0x3201
+      if (result == node.ku8MBSuccess) {
+        epever.battState      = node.getResponseBuffer(0);
+        epever.chargingState  = node.getResponseBuffer(1);
+        epever.connected = true;
+      } else {
+        epever.connected = false;
+        WebSerial.println("Error reading registers at 0x" + String(REG_BATTERY_STATUS, HEX) + ": " + String(result));
+      }
+      step++;
+    } break;
+
+    case 4: {
+      reg = 0x330C; // Daily Energy Low Reg
+      result = node.readInputRegisters(reg, 4);
+      if (result == node.ku8MBSuccess) {
+        epever.dailyEnergy    = ((uint32_t)node.getResponseBuffer(0) | ((uint32_t)node.getResponseBuffer(1) << 16)) / 100.0f;
+        epever.monthlyEnergy  = ((uint32_t)node.getResponseBuffer(2) | ((uint32_t)node.getResponseBuffer(3) << 16)) / 100.0f;
       } else WebSerial.println("Error reading registers at 0x" + String(reg, HEX) + ": " + String(result));
       step++;
-    break;
+    } break;
+
+    default: step = 0;
+  }
+}
+
+void readParameters() {
+  int result;
+  result = node.readHoldingRegisters(0x9000, 15);
+  if (result == node.ku8MBSuccess) {
+    epever.battType          = node.getResponseBuffer(0);
+    epever.battCap           = node.getResponseBuffer(1);
+    epever.tempComp          = node.getResponseBuffer(2) / 100.0f;
+    epever.hVoltDisc         = node.getResponseBuffer(3) / 100.0f;
+    epever.chgLimitVolt      = node.getResponseBuffer(4) / 100.0f;
+    epever.overVoltRec       = node.getResponseBuffer(5) / 100.0f;
+    epever.eqVolt            = node.getResponseBuffer(6) / 100.0f;
+    epever.boostVolt         = node.getResponseBuffer(7) / 100.0f;
+    epever.floatVolt         = node.getResponseBuffer(8) / 100.0f;
+    epever.boostRecVolt      = node.getResponseBuffer(9) / 100.0f;
+    epever.lowVoltRec        = node.getResponseBuffer(10) / 100.0f;
+    epever.underVoltRecover  = node.getResponseBuffer(11) / 100.0f;
+    epever.underVoltWarn     = node.getResponseBuffer(12) / 100.0f;
+    epever.lowVoltDisc       = node.getResponseBuffer(13) / 100.0f;
+    epever.dischLimitVolt    = node.getResponseBuffer(14) / 100.0f;
+  }
+  delay(5);
+}
+
+void requestParameterHandler() {
+  if (!Firebase.ready()) {
+    WebSerial.println("Firebase not ready");
+    return;
+  } 
+
+  bool isRequested = Firebase.RTDB.getBool(&fbDO, "epever/parameters/isRequested") ? fbDO.boolData() : false;
+  if (isRequested && epever.connected) {
+    readParameters();
+
+    FirebaseJson param;
+    param.set("batt_type",          epever.battType);
+    param.set("batt_capacity",      epever.battCap);
+    param.set("temp_compensation",  epever.tempComp);
+    param.set("h_voltage_disconnect",   epever.hVoltDisc);
+    param.set("charging_limit_voltage", epever.chgLimitVolt);
+    param.set("overvoltage_reconnect",  epever.overVoltRec);
+    param.set("equalization_voltage",   epever.eqVolt);
+    param.set("boost_voltage",          epever.boostVolt);
+    param.set("float_voltage",          epever.floatVolt);
+    param.set("boost_reconnect_voltage",epever.boostRecVolt);
+    param.set("low_voltage_reconnect",  epever.lowVoltRec);
+    param.set("undervoltage_recover",   epever.underVoltRecover);
+    param.set("undervoltage_warning",   epever.underVoltWarn);
+    param.set("low_voltage_disconnect", epever.lowVoltDisc);
+    param.set("discharge_limit_voltage",epever.dischLimitVolt);
+
+    Firebase.RTDB.setJSON(&fbDO, "epever/parameters/data", &param);
+    Firebase.RTDB.setBool(&fbDO, "epever/parameters/isRequested", false);
+
+    WebSerial.println("Parameters read and sent to Firebase");
   }
 }
 
@@ -325,31 +327,32 @@ void loop() {
   if (currentMillis - lastUpdate > UPDATE_INTERVAL) {
     lastUpdate = currentMillis;
     readSensors();
-    readSensors2();
+    requestParameterHandler();
     
-    if (Firebase.ready() && live.connected) {
+    if (Firebase.ready() && epever.connected) {
       time_t now = getTimestamp();     
       
-      Firebase.RTDB.setBool(&fbDO, "/epever/is_online", true);  // Set device online status 
+      Firebase.RTDB.setBool(&fbDO, "epever/is_online", true);  // Set device online status 
       FirebaseJson json;
       if (now > 10000) {
-        json.set("timestamp", (int)now);          // Timestamp
-        json.set("isConnected", live.connected);  // Modbus Connection Status
-        json.set("pv/volt", live.pvVolt);         // PV Voltage
-        json.set("pv/amps", live.pvAmps);         // PV Current
-        json.set("pv/power", live.pvPower);       // PV Power
-        json.set("batt/volt", live.battVolt);     // Battery Voltage
-        json.set("batt/amps", live.chgAmps);      // Charge Current
-        json.set("batt/soc", live.battSOC);       // Battery SOC
-        json.set("load/power", live.loadPower);   // Load Power
-        json.set("load/amps", live.loadAmps);     // Load Current
-        json.set("temp", live.temp);              // Temperature
-        json.set("daily_kwh", live.dailyEnergy);  // Daily Energy
-        json.set("status_code", live.status);     // Status Code
+        json.set("timestamp", (int)now);                // Timestamp
+        json.set("isConnected", epever.connected);      // Modbus Connection Status
+        json.set("pv/volt", epever.pvVolt);             // PV Voltage
+        json.set("pv/amps", epever.pvAmps);             // PV Current
+        json.set("pv/power", epever.pvPower);           // PV Power
+        json.set("batt/volt", epever.battVolt);         // Battery Voltage
+        json.set("batt/amps", epever.chgAmps);          // Charge Current
+        json.set("batt/power", epever.chgPower);        // Charge Power
+        json.set("batt/soc", epever.soc);               // Battery SOC
+        json.set("load/power", epever.loadPower);       // Load Power
+        json.set("load/amps", epever.loadAmps);         // Load Current
+        json.set("temp", epever.deviceTemp);            // Temperature
+        json.set("daily_kwh", epever.dailyEnergy);      // Daily Energy
+        json.set("batt_state", epever.battState);       // Battery Status
+        json.set("status_code", epever.chargingState);  // Status Code
         
-        Firebase.RTDB.setJSON(&fbDO, "/epever/live", &json);
+        Firebase.RTDB.setJSON(&fbDO, "epever/live", &json);
       }
-      WebSerial.println("Live Data Updated");
     } else WebSerial.println("Skipping Live Data Update - MODBUS Disconnected");
   }
 
@@ -357,7 +360,7 @@ void loop() {
   // Checking every 60s is plenty. It frees up bandwidth for the sensors.
   if (currentMillis - lastOTACheck > OTA_CHECK_INTERVAL) {
     lastOTACheck = currentMillis;
-    checkOTA(); 
+    checkOTA();
   }
 
   // --- 3. History Data Update (Slow - Every 15 mins) ---
@@ -365,19 +368,19 @@ void loop() {
     lastHistoryUpdate = currentMillis;
     readSensors();
     
-    if (Firebase.ready() && live.connected) {
+    if (Firebase.ready() && epever.connected) {
       time_t now = getTimestamp();
       if (now > 10000) {
         FirebaseJson hist;
-        hist.set("hStamp", (int)now);           // Timestamp
-        hist.set("hCCode", live.status);        // Status Code
-        hist.set("hPWatt", live.pvPower);       // Power
-        hist.set("hBVolt", live.battVolt);      // Battery
-        hist.set("hBSOC", live.battSOC);        // SOC
-        hist.set("hDayWatt", live.dailyEnergy); // Daily Energy
+        hist.set("hStamp",    (int)now);             // Timestamp
+        hist.set("hCCode",    epever.chargingState); // Status Code
+        hist.set("hPWatt",    epever.pvPower);       // Power
+        hist.set("hBVolt",    epever.battVolt);      // Battery
+        hist.set("hBSOC",     epever.soc);           // SOC
+        hist.set("hDayWatt",  epever.dailyEnergy);   // Daily Energy
         
         // Push adds a new unique node to the list
-        Firebase.RTDB.pushJSON(&fbHist, "/epever/history", &hist);
+        Firebase.RTDB.pushJSON(&fbHist, "epever/history", &hist);
         WebSerial.println("History Log Pushed");
       }
     } else WebSerial.println("Skipping History Log - MODBUS Disconnected");

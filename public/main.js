@@ -21,35 +21,6 @@ let liveLabels = Array(30).fill('');
 let fetchedLogData = [];
 let lastPacketTime = Date.now(); // To track device timeouts
 
-window.addEventListener('load', () => {
-    lucide.createIcons();
-    initCharts();
-    // auth.signInAnonymously().catch(console.error);
-    // startFirebaseListener();
-    
-    document.getElementById('logDateSelector').valueAsDate = new Date(); // Set to today by default
-    
-    // Setup Drag & Drop
-    const dropzone = document.getElementById('upload-dropzone');
-    dropzone.addEventListener('click', () => document.getElementById('fw-file-input').click());
-    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); e.currentTarget.classList.add('bg-gray-100'); });
-    dropzone.addEventListener('dragleave', (e) => { e.currentTarget.classList.remove('bg-gray-100'); });
-    dropzone.addEventListener('drop', handleDrop);
-
-    setInterval(() => {
-        const now = Date.now();
-        const diff = (now - lastPacketTime) / 1000; // Selisih dalam detik
-        const devStatus = document.getElementById('device-status');
-        const devDot = document.getElementById('conn-dot-device');
-        if (diff > 120) { // Jika lebih dari 2 menit
-            devStatus.textContent = "Device Offline";
-            devStatus.className = "text-sm text-red-600 font-bold";
-            devDot.className = "inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse";
-            if (firebase.auth().currentUser) {db.ref('epever/is_online').set(false).catch(e => {});}
-        }
-    }, 5000); // Cek setiap 5 detik
-});
-
 // --- AUTH LOGIC ---
 auth.onAuthStateChanged((user) => {
     const loadingScreen = document.getElementById('view-loading');
@@ -70,8 +41,6 @@ auth.onAuthStateChanged((user) => {
         stopFirebaseListener();
     }
 
-    // 2. Terakhir, hilangkan Loading Screen setelah keputusan dibuat
-    // Kita kasih sedikit delay/animasi agar transisi halus (opsional)
     if (loadingScreen && !loadingScreen.classList.contains('hidden-view')) {
         setTimeout(() => {
             loadingScreen.classList.add('opacity-0'); // Efek fade out (jika didukung CSS)
@@ -154,9 +123,10 @@ window.addEventListener("pagehide", () => {
 });
 
 function switchView(id) {
-    document.getElementById('view-dashboard').className = id==='dashboard'?'fade-in space-y-6':'hidden-view';
-    document.getElementById('view-history').className = id==='history'?'fade-in space-y-6':'hidden-view';
-    document.getElementById('view-firmware').className = id==='firmware'?'fade-in space-y-6':'hidden-view';
+    document.getElementById('view-dashboard').className = id==='dashboard'  ?'fade-in space-y-6':'hidden-view';
+    document.getElementById('view-history').className   = id==='history'    ?'fade-in space-y-6':'hidden-view';
+    document.getElementById('view-settings').className  = id==='settings'   ?'fade-in space-y-6':'hidden-view';
+    document.getElementById('view-firmware').className  = id==='firmware'   ?'fade-in space-y-6':'hidden-view';
     
     // Update Buttons
     const activeClass = "px-4 py-2 rounded-md text-sm font-medium flex gap-2 items-center bg-solar-500 text-white transition-all shadow-md";
@@ -167,45 +137,66 @@ function switchView(id) {
     
     document.getElementById('btn-dashboard').className  = `${id==='dashboard'   ?activeClass:inactiveClass}`;
     document.getElementById('btn-history').className    = `${id==='history'     ?activeClass:inactiveClass}`;
+    document.getElementById('btn-settings').className   = `${id==='settings'    ?activeClass:inactiveClass}`;
     document.getElementById('btn-firmware').className   = `${id==='firmware'    ?activeClass:inactiveClass}`;
 }
 
+function manageStatusDot(statusElement, isConnected) {
+    switch (statusElement) {
+        case 'fb-conn-dot': {
+            const fbDot = document.getElementById('fb-conn-dot');
+            const fbDotBounce = document.getElementById('fb-conn-dot-bounce');
+            const fbStatus = document.getElementById('fb-connection-status');
+            if (isConnected) {
+                fbDot.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500";
+                fbDotBounce.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75";
+                fbStatus.textContent = "Firebase Connected";
+            } else {
+                fbDot.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500";
+                fbDotBounce.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75";
+                fbStatus.textContent = "Paused (Idle)";
+            }
+        } break;
+        case 'device-conn-dot': {
+            const devDot = document.getElementById('device-conn-dot');
+            const devDotBounce = document.getElementById('device-conn-dot-bounce');
+            const devStatus = document.getElementById('device-connection-status');
+            if (isConnected) {
+                devDot.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500";
+                devDotBounce.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75";
+                devStatus.textContent = "Device Online";
+            } else {
+                devDot.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500";
+                devDotBounce.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75";
+                devStatus.textContent = "Device Probably Offline";
+            } 
+        } break;
+        default:
+            console.warn("Unknown status element:", statusElement);
+    }
+}
+
+// --- FIREBASE REALTIME LISTENER LOGIC ---
 function startFirebaseListener() {
     if (isConnectionActive) return;         // Prevent double connections
 
     console.log("Starting Connection...");
     firebase.database().goOnline(); // Ensure socket is open
 
-    const devStatus = document.getElementById('device-status');
-    const devDot = document.getElementById('conn-dot-device');
-    const statusEl = document.getElementById('connection-status');
-    const dotEl = document.getElementById('conn-dot');
-
-    // --- TAMBAHAN LISTENER STATUS PERANGKAT ---
+    /*/ --- TAMBAHAN LISTENER STATUS PERANGKAT ---
     db.ref('epever/is_online').on('value', (snapshot) => {
         const isDeviceOnline = snapshot.val(); // true atau false
-        
-        // Update UI Dot Indikator Utama
-        if (isDeviceOnline === true) {
-            devStatus.textContent = "Device Online";
-            devStatus.className = "text-sm text-green-600 font-bold";
-            devDot.className = "inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse";
-        } else {
-            devStatus.textContent = "Device Offline";
-            devStatus.className = "text-sm text-red-600 font-bold";
-            devDot.className = "inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse";
-        }
+        manageStatusDot('device-conn-dot', isDeviceOnline);
     });
-    // --- AKHIR TAMBAHAN ---
+    // --- AKHIR TAMBAHAN ---*/
     
     db.ref('epever/live').on('value', (snapshot) => {
         const data = snapshot.val();
         if (!data) return;
 
         // Update UI only if we are actually connected
-        statusEl.textContent = "Firebase Connected";
-        dotEl.className = "inline-block w-2 h-2 rounded-full bg-solar-500 animate-pulse";
         updateUI(data);
+        manageStatusDot('fb-conn-dot', true);
     });
     isConnectionActive = true;
 }
@@ -221,10 +212,7 @@ function stopFirebaseListener() {
     // 2. Kill the WebSocket to save bandwidth/battery immediately
     firebase.database().goOffline();
 
-    const statusEl = document.getElementById('connection-status');
-    const dotEl = document.getElementById('conn-dot');
-    statusEl.textContent = "Paused (Idle)"; 
-    dotEl.className = "inline-block w-2 h-2 rounded-full bg-yellow-500";
+    manageStatusDot('fb-conn-dot', false);
 
     isConnectionActive = false;
 }
@@ -232,53 +220,44 @@ function stopFirebaseListener() {
 function updateUI(data) {
     lastPacketTime = Date.now(); // reset when packet received
 
-    const statusLabel = getStatusLabel(data.status_code);
-    const statusEl = document.getElementById('charging-stage-display');
-    statusEl.textContent = statusLabel.text;
-    statusEl.className = `text-lg font-bold mt-1 ${statusLabel.color}`;
+    const statusLabel       = getStatusLabel(data.status_code);
+    const statusEl          = document.getElementById('charging-stage-display');
+    statusEl.textContent    = statusLabel.text;
+    statusEl.className      = `text-lg font-bold mt-1 ${statusLabel.color}`;
 
-    document.getElementById('panel-power').textContent = data.pv.power.toFixed(2);
-    document.getElementById('pv-bar').style.width = Math.min((data.pv.power/500)*100, 100) + "%";
-    document.getElementById('battery-voltage').textContent = data.batt.volt.toFixed(2);
-    document.getElementById('load-power').textContent = data.load.power.toFixed(2);
-    document.getElementById('gauge-soc-text').textContent = Math.round(data.batt.soc) + "%";
-    document.getElementById('detail-pv-volt').textContent = data.pv.volt.toFixed(2);
-    document.getElementById('detail-chg-amp').textContent = data.batt.amps.toFixed(2);
-    document.getElementById('detail-temp').textContent = data.temp.toFixed(1);
-    document.getElementById('detail-daily-energy').textContent = data.daily_kwh.toFixed(2);
+    document.getElementById('panel-power').textContent      = data.pv.power.toFixed(2);
+    document.getElementById('pv-bar').style.width           = Math.min((data.pv.power/(120*3))*100, 100) + "%";
+    document.getElementById('battery-voltage').textContent  = data.batt.volt.toFixed(2);
+    document.getElementById('load-power').textContent       = data.load.power.toFixed(2);
+    document.getElementById('load-amp').textContent         = data.load.amps.toFixed(2) + " A";
+    document.getElementById('gauge-soc-text').textContent   = Math.round(data.batt.soc) + "%";
+    document.getElementById('pv-voltage').textContent       = data.pv.volt.toFixed(2);
+    document.getElementById('charging-current').textContent = data.batt.amps.toFixed(2);
+    document.getElementById('device-temp').textContent      = data.temp.toFixed(1);
+    document.getElementById('daily-energy').textContent     = data.daily_kwh.toFixed(2);
     
     const offset = 282.7 - ((data.batt.soc/100) * 282.7);
     const ring = document.querySelector('.gauge-ring');
-    if(ring) { ring.style.strokeDashoffset = offset; ring.style.stroke = data.batt.soc < 30 ? "#ef4444" : "#22c55e"; }
-    else console.error("Gauge ring element not found");
+    if(ring) { 
+        ring.style.strokeDashoffset = offset; 
+        ring.style.stroke = data.batt.soc < 30 ? "#ef4444" : "#22c55e"; 
+    } else console.error("Gauge ring element not found");
 
     if(liveChartInstance){
         livePVData.push(data.pv.power); livePVData.shift(); liveChartInstance.update('none');
     }
 
-    // Cek selisih waktu sekarang vs waktu data terakhir (timestamp dari ESP32)
+    /*/ Cek selisih waktu sekarang vs waktu data terakhir (timestamp dari ESP32)
     const now = Date.now() / 1000; // Detik sekarang
     const dataTime = data.timestamp || 0; 
     const diff = now - dataTime;
 
-    // Kalau data telat lebih dari 60 detik, anggap hang. 120 detik, set is_online ke false di database.
-    if (diff > 120) {
-        document.getElementById('device-status').textContent = "Device Offline";
-        document.getElementById('device-status').className = "text-sm text-red-600 font-bold";
-        document.getElementById('conn-dot-device').className = "inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse";
-        db.ref('epever/is_online').set(false)
-            .catch((error) => console.error("Gagal update DB:", error));
-    } else if (diff > 60) {
-        document.getElementById('device-status').textContent = "Device Probably Offline";
-        document.getElementById('device-status').className = "text-sm text-orange-600 font-bold";
-        document.getElementById('conn-dot-device').className = "inline-block w-2 h-2 rounded-full bg-orange-500 animate-bounce";
+    // Kalau data telat lebih dari 60 detik, anggap hang
+    if (diff > 60) {
+        manageStatusDot('device-conn-dot', false);
     } else {
-        document.getElementById('device-status').textContent = "Device Online";
-        document.getElementById('device-status').className = "text-sm text-green-600 font-bold";
-        document.getElementById('conn-dot-device').className = "inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse";
-        db.ref('epever/is_online').set(true)
-            .catch((error) => console.error("Gagal update DB:", error));
-    }
+        manageStatusDot('device-conn-dot', true);
+    }*/
 }
 
 function initCharts() {
@@ -369,12 +348,22 @@ function getDayChartInstance(chartLabels = [], chartData = []) {
 }
 
 // --- HISTORY LOG FETCHING ---
-function fetchDayLog() {
-    const dateInput = document.getElementById('logDateSelector').value;
-    if(!dateInput) return alert("Select a date");
+let currentHistoryDate = new Date().toISOString().split('T')[0];
 
-    const startTs = new Date(dateInput).getTime() / 1000;       // Start of selected day in seconds
-    const endTs = startTs + 86400;                              // End of selected day in seconds
+function changeHistoryDate(days) {
+    const date = new Date(currentHistoryDate);
+    date.setDate(date.getDate() + days);
+    const newDate = date.toISOString().split('T')[0];
+    document.getElementById('logDateSelector').value = newDate;
+    fetchDayLog();
+}
+
+function fetchDayLog() {
+    currentHistoryDate = document.getElementById('logDateSelector').value;
+    if(!currentHistoryDate) return alert("Select a date");
+
+    const startTs = new Date(currentHistoryDate).getTime() / 1000;          // Start of selected day in seconds
+    const endTs = startTs + 86400;                                          // End of selected day in seconds
 
     const tbody = document.getElementById('detail-table-body');
     tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center">Loading...</td></tr>';

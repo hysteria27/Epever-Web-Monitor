@@ -17,6 +17,8 @@
     
     <script src="fbConfig.js"> // --- FIREBASE CONFIG --- </script>
     <script src="main.js"></script>
+    <script src="settings.js"></script>
+    <script src="eventListeners.js"></script>
 
     <script>
         tailwind.config = {
@@ -96,26 +98,28 @@
                     </div>
 
                     <div class="flex items-center gap-4 text-sm font-medium text-gray-500 dark:text-gray-400 pl-1">
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-2 w-48">
                             <span class="relative flex h-2.5 w-2.5">
-                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                                <span id="fb-conn-dot-bounce" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span id="fb-conn-dot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                             </span>
-                            <span>Firebase Connected</span>
+                            <span id="fb-connection-status">Firebase Connected</span>
                         </div>
 
                         <div class="flex items-center gap-2">
                             <span class="relative flex h-2.5 w-2.5">
-                                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                                <span id="device-conn-dot-bounce" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span id="device-conn-dot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
                             </span>
-                            <span class="text-red-600 dark:text-red-400 font-semibold">Device Offline</span>
+                            <span id="device-connection-status">Device Offline</span>
                         </div>
                     </div>
                 </div>
 
                 <div class="flex items-center gap-2 py-2">
-                    <button onclick="switchView('dashboard')"   id="btn-dashboard"  class="px-4 py-2 rounded-md text-sm font-medium flex gap-2 items-center bg-solar-500 text-white transition-all shadow-md"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> Live</button>
+                    <button onclick="switchView('dashboard')"   id="btn-dashboard"  class="px-4 py-2 rounded-md text-sm font-medium flex gap-2 items-center bg-solar-500 text-white transition-all shadow-md"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard</button>
                     <button onclick="switchView('history')"     id="btn-history"    class="px-4 py-2 rounded-md text-sm font-medium flex gap-2 items-center bg-white text-gray-600 hover:bg-gray-100 transition-all shadow-md"><i data-lucide="calendar-clock" class="w-4 h-4"></i> Log</button>
+                    <button onclick="switchView('settings')"    id="btn-settings"   class="px-4 py-2 rounded-md text-sm font-medium flex gap-2 items-center bg-white text-gray-600 hover:bg-gray-100 transition-all shadow-md"><i data-lucide="settings" class="w-4 h-4"></i> Parameters</button>
                     <button onclick="switchView('firmware')"    id="btn-firmware"   class="px-4 py-2 rounded-md text-sm font-medium flex gap-2 items-center bg-white text-gray-600 hover:bg-gray-100 transition-all shadow-md"><i data-lucide="package" class="w-4 h-4"></i> OTA</button>
                     
                     <div class="h-6 w-px bg-gray-300 dark:bg-slate-700 mx-1"></div>
@@ -197,12 +201,13 @@
                             <span id="battery-voltage" class="text-4xl font-extrabold text-gray-900 dark:text-white tracking-tight">0.0</span>
                             <span class="text-lg font-medium text-gray-500">V</span>
                         </div>
-                        <div class="text-xs text-gray-400 mt-2">System Voltage: <span id="sys-volt-display">24V</span></div>
+                        <div class="text-xs text-gray-400 mt-2">System Voltage: <span id="sys-volt-display">12V</span></div>
                     </div>
                 </div>
                 
-                <!-- SOC -->
+                <!-- SOC & Live Telemetry -->
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                    <!-- State of Charge Gauge -->
                     <div class="bg-white border border-gray-100 p-6 rounded-2xl shadow-sm flex flex-col items-center justify-center relative">
                         <h3 class="absolute top-6 left-6 text-xs font-bold uppercase tracking-wider text-gray-400 ">State of Charge</h3>
                         <div class="w-48 h-48 relative mt-4">
@@ -224,6 +229,7 @@
                         </div>
                     </div>
 
+                    <!-- Live Telemetry -->
                     <div class="lg:col-span-2 bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-6 rounded-2xl shadow-sm flex flex-col">
                         <div class="flex justify-between items-center mb-6">
                             <h3 class="font-bold text-lg text-gray-800 dark:text-gray-100">Live Telemetry</h3>
@@ -233,19 +239,19 @@
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 h-full">
                             <div class="p-4 rounded-xl bg-gray-50 dark:bg-slate-800/50 border border-gray-100 dark:border-slate-700/50 flex flex-col justify-between">
                                 <div class="text-gray-500 dark:text-gray-400 text-xs font-medium">Panel Voltage</div>
-                                <div class="text-xl font-bold text-gray-900 dark:text-white"><span id="detail-pv-volt">0.0</span> <span class="text-sm font-normal text-gray-500">V</span></div>
+                                <div class="text-xl font-bold text-gray-900 dark:text-white"><span id="pv-voltage">0.0</span> <span class="text-sm font-normal text-gray-500">V</span></div>
                             </div>
                             <div class="p-4 rounded-xl bg-gray-50 dark:bg-slate-800/50 border border-gray-100 dark:border-slate-700/50 flex flex-col justify-between">
                                 <div class="text-gray-500 dark:text-gray-400 text-xs font-medium">Charge Current</div>
-                                <div class="text-xl font-bold text-gray-900 dark:text-white"><span id="detail-chg-amp">0.0</span> <span class="text-sm font-normal text-gray-500">A</span></div>
+                                <div class="text-xl font-bold text-gray-900 dark:text-white"><span id="charging-current">0.0</span> <span class="text-sm font-normal text-gray-500">A</span></div>
                             </div>
                             <div class="p-4 rounded-xl bg-gray-50 dark:bg-slate-800/50 border border-gray-100 dark:border-slate-700/50 flex flex-col justify-between">
                                 <div class="text-gray-500 dark:text-gray-400 text-xs font-medium">Device Temp</div>
-                                <div class="text-xl font-bold text-gray-900 dark:text-white"><span id="detail-temp">25.0</span> <span class="text-sm font-normal text-gray-500">°C</span></div>
+                                <div class="text-xl font-bold text-gray-900 dark:text-white"><span id="device-temp">25.0</span> <span class="text-sm font-normal text-gray-500">°C</span></div>
                             </div>
                             <div class="p-4 rounded-xl bg-gray-50 dark:bg-slate-800/50 border border-gray-100 dark:border-slate-700/50 flex flex-col justify-between">
                                 <div class="text-gray-500 dark:text-gray-400 text-xs font-medium">Daily Energy</div>
-                                <div class="text-xl font-bold text-solar-500"><span id="detail-energy">0.0</span> <span class="text-sm font-normal">kWh</span></div>
+                                <div class="text-xl font-bold text-solar-500"><span id="daily-energy">0.0</span> <span class="text-sm font-normal">kWh</span></div>
                             </div>
                         </div>
                     </div>
@@ -267,40 +273,272 @@
 
             <!-- HISTORY VIEW -->
             <div id="view-history" class="hidden-view fade-in space-y-6">
-                <div class="flex flex-col md:flex-row justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-sm gap-4">
-                    <div><h2 class="text-xl font-bold">History Log</h2><p class="text-gray-500 text-xs">Select date to view logs.</p></div>
-                    <div class="flex gap-2 items-center">
-                        <input type="date" id="logDateSelector" class="bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-900 dark:text-white text-sm rounded-lg block p-2.5">
-                        <button onclick="fetchDayLog()" class="bg-solar-500 hover:bg-solar-600 text-white font-medium rounded-lg text-sm px-4 py-2.5" title="Load data for selected date"><i data-lucide="search" class="w-4 h-4"></i></button>
-                        <button onclick="downloadLog()" class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-200 font-medium rounded-lg text-sm px-4 py-2.5 flex items-center gap-2" title="Download CSV file"><i data-lucide="download" class="w-4 h-4"></i> <span class="hidden md:inline">CSV</span></button>
+                <div class="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden min-h-[80vh]">
+                    <!-- Header -->
+                    <div class="p-6 border-b border-gray-100 dark:border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div>
+                            <h2 class="text-xl font-bold">Historical Production</h2>
+                            <p class="text-gray-500 text-xs">Analyze past performance and yield.</p>
+                        </div>
+                        <div class="flex gap-1 p-2 items-center bg-gray-100 rounded-lg text-gray-900 text-sm">
+                            <div class="flex items-center gap-1 bg-white rounded-lg">
+                                <button onclick="changeHistoryDate(-1)" class="hover:bg-gray-50 block p-2 transition-all">
+                                    <i data-lucide="chevron-left" class="w-5 h-5"></i>
+                                </button>
+                                <input type="date" id="logDateSelector" class="hover:bg-gray-50 block p-2 transition-all cursor-text" onchange="fetchDayLog()">
+                                <button onclick="changeHistoryDate(1)" class="hover:bg-gray-50 block p-2 transition-all">
+                                    <i data-lucide="chevron-right" class="w-5 h-5"></i>
+                                </button>
+                            </div>
+                            <div class="flex items-center gap-1 bg-white rounded-lg">
+                                <button onclick="downloadLog()" class="bg-white hover:bg-gray-50 border border-gray-100 text-gray-900 text-sm rounded-lg block p-2 transition-all" title="Download CSV file">
+                                    <i data-lucide="download" class="w-5 h-5"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-6 md:p-8">
+                        <!-- Chart -->
+                        <div class="mb-8 h-72 w-full relative">
+                            <h3 class="font-bold text-lg mb-4">Intraday PV Power (Watts)</h3>
+                            <div class="h-72 w-full relative">
+                                <canvas id="dayChart"></canvas>
+                                <div id="no-data-msg" class="absolute inset-0 flex items-center justify-center text-gray-400 hidden">No data</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Detailed Log Table -->
+                        <div>
+                            <div class="p-6 border-b border-gray-100 flex justify-between items-center">
+                                <h3 class="font-bold text-lg">Detailed Log <span id="detail-date-title" class="text-sm font-normal text-gray-500 ml-2"></span></h3>
+                            </div>
+                            <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-slate-700 max-h-80 overflow-y-auto">
+                                <table class="w-full text-sm text-left glass-table">
+                                    <thead class="bg-gray-50 dark:bg-slate-800/50 text-gray-500 uppercase text-xs sticky top-0">
+                                        <tr><th class="px-6 py-3">Time</th><th class="px-6 py-3">Status</th><th class="px-6 py-3 text-right">Power</th><th class="px-6 py-3 text-right">Bat</th><th class="px-6 py-3 text-right">SOC</th></tr>
+                                    </thead>
+                                    <tbody id="detail-table-body" class="divide-y divide-gray-100 dark:divide-slate-800"><tr><td colspan="5" class="p-4 text-center text-gray-400">Select date</td></tr></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <!-- Monthly Summary -->
+                        <div>
+                            <div class="p-6 border-b border-gray-100 flex justify-between items-center">
+                                <h3 class="font-bold text-lg">Monthly Summary</h3>
+                                <button onclick="fetchSummary()" class="text-sm text-solar-500 font-bold" title="Reload summary list">Refresh</button>
+                            </div>
+                            <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-slate-700 max-h-80 overflow-y-auto">
+                                <table class="w-full text-sm text-left glass-table">
+                                    <thead class="bg-gray-50 dark:bg-slate-800/50 text-gray-500 uppercase text-xs sticky top-0"><tr><th class="px-6 py-3">Date</th><th class="px-6 py-3 text-right">Yield (kWh)</th></tr></thead>
+                                    <tbody id="summary-table-body" class="divide-y divide-gray-100 dark:divide-slate-800"><tr><td colspan="2" class="p-4 text-center text-gray-400">Loading...</td></tr></tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                
-                <div class="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-6 rounded-2xl shadow-sm">
-                    <h3 class="font-bold text-lg mb-4">Intraday PV Power (Watts)</h3>
-                    <div class="h-72 w-full relative"><canvas id="dayChart"></canvas><div id="no-data-msg" class="absolute inset-0 flex items-center justify-center text-gray-400 hidden">No data</div></div>
-                </div>
-                
-                <div class="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-                    <div class="p-6 border-b border-gray-100 dark:border-slate-800"><h3 class="font-bold text-lg">Detailed Log <span id="detail-date-title" class="text-sm font-normal text-gray-500 ml-2"></span></h3></div>
-                    <div class="max-h-64 overflow-y-auto">
-                        <table class="w-full text-left text-sm">
-                            <thead class="bg-gray-50 dark:bg-slate-800/50 text-gray-500 uppercase text-xs sticky top-0">
-                                <tr><th class="px-6 py-3">Time</th><th class="px-6 py-3">Status</th><th class="px-6 py-3 text-right">Power</th><th class="px-6 py-3 text-right">Bat</th><th class="px-6 py-3 text-right">SOC</th></tr>
-                            </thead>
-                            <tbody id="detail-table-body" class="divide-y divide-gray-100 dark:divide-slate-800"><tr><td colspan="5" class="p-4 text-center text-gray-400">Select date</td></tr></tbody>
-                        </table>
+            </div>
+
+            <!-- PARAMETER SETTING -->
+            <div id="view-settings" class="hidden-view fade-in space-y-6">
+                <div class="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-xl overflow-hidden">
+                    
+                    <div class="p-6 border-b border-gray-100 dark:border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-50/50 dark:bg-slate-800/30">
+                        <div>
+                            <h2 class="text-xl font-bold flex items-center gap-2 text-gray-800 dark:text-white">
+                                <i data-lucide="sliders" class="w-5 h-5 text-solar-500"></i>
+                                Control Parameters
+                            </h2>
+                            <p class="text-gray-500 dark:text-gray-400 text-sm mt-1">Configure charging profiles and protection limits.</p>
+                        </div>
+                        <div class="flex items-center gap-3 bg-white dark:bg-slate-800 px-4 py-2 rounded-lg border border-gray-200 dark:border-slate-700 shadow-sm">
+                            <div class="text-xs text-gray-400 uppercase font-bold tracking-wider">Device ID</div>
+                            <div class="font-mono text-sm font-bold text-solar-600 dark:text-solar-500">EP-2048-BN</div>
+                        </div>
                     </div>
-                </div>
-                
-                <div class="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-                    <div class="p-6 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center"><h3 class="font-bold text-lg">Monthly Summary</h3><button onclick="fetchSummary()" class="text-sm text-solar-500 font-bold" title="Reload summary list">Refresh</button></div>
-                    <div class="max-h-64 overflow-y-auto">
-                        <table class="w-full text-left text-sm">
-                            <thead class="bg-gray-50 dark:bg-slate-800/50 text-gray-500 uppercase text-xs sticky top-0"><tr><th class="px-6 py-3">Date</th><th class="px-6 py-3 text-right">Yield (kWh)</th></tr></thead>
-                            <tbody id="summary-table-body" class="divide-y divide-gray-100 dark:divide-slate-800"><tr><td colspan="2" class="p-4 text-center text-gray-400">Loading...</td></tr></tbody>
-                        </table>
-                    </div>
+
+                    <form id="settings-form" onsubmit="saveSettings(event)" class="p-6 md:p-8">
+                        <div class="mb-8">
+                            <h3 class="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2 mb-5 pb-2 border-b border-gray-100 dark:border-slate-800">
+                                <i data-lucide="battery" class="w-4 h-4 text-solar-500"></i> Battery Configuration
+                            </h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                <div class="group">
+                                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Battery Type</label>
+                                    <div class="relative">
+                                        <select id="param-batt-type" class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg py-2.5 pl-3 pr-10 text-sm text-gray-700 dark:text-gray-200 focus:ring-2 focus:ring-solar-500 focus:border-solar-500 outline-none transition-all appearance-none cursor-pointer hover:border-solar-500/50">
+                                            <option value="Sealed">Sealed</option>
+                                            <option value="Gel">Gel</option>
+                                            <option value="Flooded">Flooded</option>
+                                            <option value="User">User</option>
+                                            <option value="LiFePO4">LiFePO4 (User)</option>
+                                        </select>
+                                        <i data-lucide="chevron-down" class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none group-hover:text-solar-500 transition-colors"></i>
+                                    </div>
+                                </div>
+                                <div class="group">
+                                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">System Voltage</label>
+                                    <div class="relative">
+                                        <select id="param-rated-v" class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg py-2.5 pl-3 pr-10 text-sm text-gray-700 dark:text-gray-200 focus:ring-2 focus:ring-solar-500 focus:border-solar-500 outline-none transition-all appearance-none cursor-pointer hover:border-solar-500/50">
+                                            <option value="Auto">Auto Recognition</option>
+                                            <option value="12/24">12V / 24V DC</option>
+                                        </select>
+                                        <i data-lucide="chevron-down" class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none group-hover:text-solar-500 transition-colors"></i>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Capacity</label>
+                                    <div class="relative">
+                                        <input type="number" id="param-capacity" placeholder="200" class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg py-2.5 pl-3 pr-10 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-solar-500 focus:border-solar-500 outline-none transition-all placeholder-gray-400 hover:border-solar-500/50">
+                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium pointer-events-none select-none">Ah</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Temp Comp</label>
+                                    <div class="relative">
+                                        <input type="number" id="param-temp-comp" placeholder="3" class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg py-2.5 pl-3 pr-14 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-solar-500 focus:border-solar-500 outline-none transition-all placeholder-gray-400 hover:border-solar-500/50">
+                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium pointer-events-none select-none">mV/°C</span>
+                                    </div>
+                                </div>
+                            </div>
+                         </div>
+
+                        <div class="mb-8">
+                            <h3 class="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2 mb-5 pb-2 border-b border-gray-100 dark:border-slate-800">
+                                <i data-lucide="zap" class="w-4 h-4 text-solar-500"></i> Charging Voltages
+                            </h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                <div>
+                                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Over Volt. Disconnect</label>
+                                    <div class="relative">
+                                        <input type="number" step="0.1" id="param-ovd" class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg py-2.5 pl-3 pr-8 text-sm text-red-600 dark:text-red-400 font-bold focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none transition-all hover:border-red-300">
+                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium pointer-events-none select-none">V</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Charging Limit</label>
+                                    <div class="relative">
+                                        <input type="number" step="0.1" id="param-cl" class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg py-2.5 pl-3 pr-8 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-solar-500 focus:border-solar-500 outline-none transition-all hover:border-solar-500/50">
+                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium pointer-events-none select-none">V</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Over Volt. Reconnect</label>
+                                    <div class="relative">
+                                        <input type="number" step="0.1" id="param-ovr" class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg py-2.5 pl-3 pr-8 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-solar-500 focus:border-solar-500 outline-none transition-all hover:border-solar-500/50">
+                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium pointer-events-none select-none">V</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Equalize Charge</label>
+                                    <div class="relative">
+                                        <input type="number" step="0.1" id="param-eq" class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg py-2.5 pl-3 pr-8 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-solar-500 focus:border-solar-500 outline-none transition-all hover:border-solar-500/50">
+                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium pointer-events-none select-none">V</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Boost Charge</label>
+                                    <div class="relative">
+                                        <input type="number" step="0.1" id="param-boost" class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg py-2.5 pl-3 pr-8 text-sm text-solar-600 dark:text-solar-400 font-bold focus:ring-2 focus:ring-solar-500 focus:border-solar-500 outline-none transition-all hover:border-solar-500/50">
+                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium pointer-events-none select-none">V</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Float Charge</label>
+                                    <div class="relative">
+                                        <input type="number" step="0.1" id="param-float" class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg py-2.5 pl-3 pr-8 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-solar-500 focus:border-solar-500 outline-none transition-all hover:border-solar-500/50">
+                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium pointer-events-none select-none">V</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Boost Reconnect</label>
+                                    <div class="relative">
+                                        <input type="number" step="0.1" id="param-br" class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg py-2.5 pl-3 pr-8 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-solar-500 focus:border-solar-500 outline-none transition-all hover:border-solar-500/50">
+                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium pointer-events-none select-none">V</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-8">
+                            <h3 class="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2 mb-5 pb-2 border-b border-gray-100 dark:border-slate-800">
+                                <i data-lucide="shield-alert" class="w-4 h-4 text-solar-500"></i> Protection & Limits
+                            </h3>
+                            <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+                                <div>
+                                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Low Volt. Reconnect</label>
+                                    <div class="relative">
+                                        <input type="number" step="0.1" id="param-lvr" class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg py-2.5 pl-3 pr-8 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-solar-500 focus:border-solar-500 outline-none transition-all hover:border-solar-500/50">
+                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium pointer-events-none select-none">V</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Under Volt. Recov</label>
+                                    <div class="relative">
+                                        <input type="number" step="0.1" id="param-uv-rec" class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg py-2.5 pl-3 pr-8 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-solar-500 focus:border-solar-500 outline-none transition-all hover:border-solar-500/50">
+                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium pointer-events-none select-none">V</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Under Volt. Warn</label>
+                                    <div class="relative">
+                                        <input type="number" step="0.1" id="param-uv-warn" class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg py-2.5 pl-3 pr-8 text-sm text-orange-500 font-bold focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all hover:border-orange-300">
+                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium pointer-events-none select-none">V</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Low Volt. Disconnect</label>
+                                    <div class="relative">
+                                        <input type="number" step="0.1" id="param-lvd" class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg py-2.5 pl-3 pr-8 text-sm text-red-600 dark:text-red-400 font-bold focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none transition-all hover:border-red-300">
+                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium pointer-events-none select-none">V</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Discharge Limit</label>
+                                    <div class="relative">
+                                        <input type="number" step="0.1" id="param-dis-limit" class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg py-2.5 pl-3 pr-8 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-solar-500 focus:border-solar-500 outline-none transition-all hover:border-solar-500/50">
+                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium pointer-events-none select-none">V</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-8">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Equalize Duration</label>
+                                    <div class="relative">
+                                        <input type="number" id="param-eq-time" class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg py-2.5 pl-3 pr-10 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-solar-500 focus:border-solar-500 outline-none transition-all hover:border-solar-500/50">
+                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium pointer-events-none select-none">min</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Boost Duration</label>
+                                    <div class="relative">
+                                        <input type="number" id="param-boost-time" class="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg py-2.5 pl-3 pr-10 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-solar-500 focus:border-solar-500 outline-none transition-all hover:border-solar-500/50">
+                                        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium pointer-events-none select-none">min</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col-reverse md:flex-row items-center gap-4 pt-6 border-t border-gray-100 dark:border-slate-800 mt-6">
+                            <button type="button" id="readParameters" class="w-full md:w-auto px-6 py-3 rounded-lg border border-gray-200 dark:border-slate-700 text-gray-600 dark:text-gray-300 font-bold hover:bg-gray-50 dark:hover:bg-slate-800 transition-all flex justify-center items-center gap-2 active:scale-95">
+                                <i data-lucide="download-cloud" class="w-4 h-4"></i> Read Device
+                            </button>
+                            
+                            <div class="flex-grow"></div>
+
+                            <span id="save-status" class="text-sm font-medium text-emerald-500 opacity-0 transition-opacity duration-500 flex items-center gap-1">
+                                <i data-lucide="check-circle-2" class="w-4 h-4"></i> Saved!
+                            </span>
+
+                            <button type="submit" id="saveParameters" class="w-full md:w-auto px-6 py-3 rounded-lg bg-gradient-to-r from-solar-600 to-solar-500 hover:from-solar-500 hover:to-solar-400 text-white font-bold shadow-lg shadow-solar-500/30 transition-all transform hover:-translate-y-0.5 flex justify-center items-center gap-2 active:scale-95">
+                                <i data-lucide="save" class="w-4 h-4"></i> Save Configuration
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
 
