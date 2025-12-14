@@ -21,6 +21,7 @@ let liveLabels = Array(30).fill('');
 let fetchedLogData = [];
 let lastPacketTime = Date.now(); // To track device timeouts
 let currentHistoryDate = new Date().toISOString().split('T')[0];
+const timezoneOffset = new Date().getTimezoneOffset() * 60;
 
 // --- AUTH LOGIC ---
 auth.onAuthStateChanged((user) => {
@@ -305,7 +306,6 @@ function getPvPowerChart() {
             chartData.push(log.pvPower);
         });
 
-
         const ctxPV = document.getElementById('pvPowerChart');
         if (!ctxPV) {
             console.warn("Chart skipped: canvas element not found");
@@ -313,7 +313,7 @@ function getPvPowerChart() {
         }
         if (!pvPowerChartInstance) {
             try {
-                pvPowerChartInstance = new RealTimeChart('pvPowerChart', 'PV Power', 'rgb(14, 165, 233)', 'W');
+                pvPowerChartInstance = new RealTimeChart('pvPowerChart', 'PV Power', 'rgb(14, 165, 233)', 'Watt');
                 console.log("PV Power Chart initialized");
             } catch (e) {
                 console.error("Chart init failed:", e);
@@ -344,7 +344,6 @@ function fetchDayLog() {
     if(!currentHistoryDate) return alert("Select a date");
 
     const currentTS = new Date(currentHistoryDate).getTime() / 1000;
-    const timezoneOffset = new Date().getTimezoneOffset() * 60;
     const startTs = currentTS + timezoneOffset;
     const endTs = startTs + 86400;
 
@@ -417,11 +416,75 @@ function downloadLog() {
     document.body.removeChild(link);
 }
 
-async function fetchMonthlySummary() {
-    try {
-    } catch (e) {
-        console.error("Error fetching monthly summary:", e);
-    }
+function fetchSummary() {
+    const tbody = document.getElementById('summary-table-body');
+    tbody.innerHTML = '<tr><td colspan="2" class="p-4 text-center text-gray-400 animate-pulse">Loading summary...</td></tr>';
+
+    // 1. Calculate timestamp for 30 days ago to limit data usage
+    const thirtyDaysAgo = Math.floor((Date.now() / 1000) - (30 * 24 * 60 * 60));
+
+    // 2. Fetch history ordered by timestamp
+    db.ref('epever/history').orderByChild('timestamp').startAt(thirtyDaysAgo).once('value')
+    .then(snapshot => {
+        const data = snapshot.val();
+        if (!data) {
+            tbody.innerHTML = '<tr><td colspan="2" class="p-4 text-center">No summary data available.</td></tr>';
+            return;
+        }
+
+        // 3. Process Data: Find the LAST log for each specific date
+        const dailyMap = {}; // Object to store the latest entry for each day
+
+        Object.values(data).forEach(log => {
+            if (!log.timestamp) return;
+
+            // Create a date key string "YYYY-MM-DD" based on user's local time
+            // We use local date string to handle timezone correctly (e.g. Indonesia WIB)
+            const dateObj = new Date(log.timestamp * 1000);
+            const dateKey = dateObj.toLocaleDateString('en-CA'); // 'en-CA' outputs YYYY-MM-DD format
+
+            // If this date is not in map OR this log is newer than what we have stored
+            if (!dailyMap[dateKey] || log.timestamp > dailyMap[dateKey].timestamp) {
+                dailyMap[dateKey] = {
+                    timestamp: log.timestamp,
+                    yield: log.dailyEnergyGenerated || 0 // Use the field from your screenshot
+                };
+            }
+        });
+
+        // 4. Sort dates descending (newest first)
+        const sortedDates = Object.keys(dailyMap).sort().reverse();
+
+        // 5. Generate HTML
+        let html = '';
+        sortedDates.forEach(dateStr => {
+            const entry = dailyMap[dateStr];
+            const displayDate = new Date(dateStr).toLocaleDateString('en-US', { 
+                weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' 
+            });
+
+            html += `
+            <tr class="hover:bg-gray-50 dark:hover:bg-slate-800 border-b border-gray-100 dark:border-slate-800 transition-colors">
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="calendar" class="w-4 h-4 text-gray-400"></i>
+                        <span class="font-medium text-gray-700 dark:text-gray-200">${displayDate}</span>
+                    </div>
+                </td>
+                <td class="px-6 py-4 text-right">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-bold bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">
+                        ${Number(entry.yield).toFixed(2)} kWh
+                    </span>
+                </td>
+            </tr>`;
+        });
+
+        tbody.innerHTML = html;
+        if(window.lucide) lucide.createIcons();
+    }) .catch(err => {
+            console.error("Summary Error:", err);
+            tbody.innerHTML = `<tr><td colspan="2" class="p-4 text-center text-red-500">Error: ${err.message}</td></tr>`;
+    });
 }
 
 // --- FIRMWARE INFO FETCHING ---

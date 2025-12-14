@@ -19,7 +19,7 @@ FirebaseConfig config;
 ModbusMaster node;
 
 // --- FIRMWARE INFO ---
-const char* FIRMWARE_VERSION = "1.2.4";
+const char* FIRMWARE_VERSION = "1.2.5";
 const char* NTP_SERVER = "pool.ntp.org";
 const long  GMT_OFFSET_SEC = 25200; // WIB (UTC+7) = 7 * 3600
 const int   DAYLIGHT_OFFSET_SEC = 0;
@@ -249,8 +249,8 @@ void readSensors() {
       reg = 0x3200;   // Battery Status Reg & Charging Status Reg
       result = node.readInputRegisters(reg, 2);
       if (result == node.ku8MBSuccess) {
-        epever.batteryState      = node.getResponseBuffer(0);
-        epever.chargingState  = node.getResponseBuffer(1);
+        epever.batteryState       = node.getResponseBuffer(0);
+        epever.chargingState      = node.getResponseBuffer(1);
         epever.connected = true;
       } else {
         epever.connected = false;
@@ -387,6 +387,7 @@ void loop() {
         FirebaseJson hist;
         hist.set("timestamp",              (int)now);             // Timestamp
         hist.set("chargingStatusCode",     epever.chargingState); // Status Code
+        hist.set("batteryStateCode",       epever.batteryState);  // Battery Status
         hist.set("pvPower",                epever.pvPower);       // Power
         hist.set("batteryVoltage",         epever.battVolt);      // Battery
         hist.set("batterySOC",             epever.soc);           // SOC
