@@ -19,6 +19,7 @@
     <script src="main.js"></script>
     <script src="settings.js"></script>
     <script src="eventListeners.js"></script>
+    <script src="chart.js"></script>
 
     <script>
         tailwind.config = {
@@ -116,7 +117,7 @@
                     </div>
                 </div>
 
-                <div class="flex items-center gap-2 py-2">
+                <div class="flex flex-wrap items-center gap-2 py-2">
                     <button onclick="switchView('dashboard')"   id="btn-dashboard"  class="px-4 py-2 rounded-md text-sm font-medium flex gap-2 items-center bg-solar-500 text-white transition-all shadow-md"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard</button>
                     <button onclick="switchView('history')"     id="btn-history"    class="px-4 py-2 rounded-md text-sm font-medium flex gap-2 items-center bg-white text-gray-600 hover:bg-gray-100 transition-all shadow-md"><i data-lucide="calendar-clock" class="w-4 h-4"></i> Log</button>
                     <button onclick="switchView('settings')"    id="btn-settings"   class="px-4 py-2 rounded-md text-sm font-medium flex gap-2 items-center bg-white text-gray-600 hover:bg-gray-100 transition-all shadow-md"><i data-lucide="settings" class="w-4 h-4"></i> Parameters</button>
@@ -262,11 +263,11 @@
                     <div class="flex justify-between items-center mb-6">
                         <div>
                             <h3 class="font-bold text-lg text-gray-800 dark:text-gray-100">Production Overview</h3>
-                            <p class="text-sm text-gray-500">Solar yield over the last 12 hours</p>
+                            <p class="text-sm text-gray-500">Solar yield over the last day</p>
                         </div>
                     </div>
                     <div class="relative h-72 w-full">
-                        <canvas id="liveChart"></canvas>
+                        <canvas id="pvPowerChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -316,9 +317,11 @@
                             <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-slate-700 max-h-80 overflow-y-auto">
                                 <table class="w-full text-sm text-left glass-table">
                                     <thead class="bg-gray-50 dark:bg-slate-800/50 text-gray-500 uppercase text-xs sticky top-0">
-                                        <tr><th class="px-6 py-3">Time</th><th class="px-6 py-3">Status</th><th class="px-6 py-3 text-right">Power</th><th class="px-6 py-3 text-right">Bat</th><th class="px-6 py-3 text-right">SOC</th></tr>
+                                        <tr><th class="px-6 py-3 text-center">Time</th><th class="px-6 py-3 text-center">Status</th><th class="px-6 py-3 text-center">Power</th><th class="px-6 py-3 text-center">Bat</th><th class="px-6 py-3 text-center">SOC</th></tr>
                                     </thead>
-                                    <tbody id="detail-table-body" class="divide-y divide-gray-100 dark:divide-slate-800"><tr><td colspan="5" class="p-4 text-center text-gray-400">Select date</td></tr></tbody>
+                                    <tbody id="detail-table-body" class="divide-y divide-gray-100 dark:divide-slate-800">
+                                        <tr><td colspan="5" class="p-4 text-center text-gray-400">Select date</td></tr>
+                                    </tbody>
                                 </table>
                             </div>
                         </div>

@@ -19,7 +19,7 @@ FirebaseConfig config;
 ModbusMaster node;
 
 // --- FIRMWARE INFO ---
-const char* FIRMWARE_VERSION = "1.2.2";
+const char* FIRMWARE_VERSION = "1.2.4";
 const char* NTP_SERVER = "pool.ntp.org";
 const long  GMT_OFFSET_SEC = 25200; // WIB (UTC+7) = 7 * 3600
 const int   DAYLIGHT_OFFSET_SEC = 0;
@@ -43,8 +43,6 @@ const uint16_t REG_LOAD_CURRENT       = 0x310D;
 const uint16_t REG_LOAD_POWER_L       = 0x310E; 
 const uint16_t REG_TEMP_CTRL          = 0x3111;
 const uint16_t REG_BAT_SOC            = 0x311A;
-const uint16_t REG_BATTERY_STATUS     = 0x3200;  
-const uint16_t REG_CHARGING_STATUS    = 0x3201;  
 const uint16_t REG_DAILY_ENERGY_L     = 0x330C;
 const uint16_t REG_MAX_BATTERY_VOLT   = 0x3302;
 // Parameter Settings (Read/Write)
@@ -71,7 +69,7 @@ struct EpeverData {
   float loadVolt, loadAmps, loadPower;
   float dailyEnergy, monthlyEnergy, yearlyEnergy, totalEnergy;
   uint16_t battTemp, deviceTemp, powerTemp;
-  uint16_t battState, chargingState;
+  uint16_t batteryState, chargingState;
 
   uint16_t battType, battCap, tempComp;
   float hVoltDisc, chgLimitVolt, overVoltRec;
@@ -237,24 +235,38 @@ void readSensors() {
     } break;
 
     case 3: {
-      result = node.readInputRegisters(REG_BATTERY_STATUS, 2); // REG 0x3200-0x3201
+      reg = 0x3110; // Temperature (Battery, Temperature inside case, Heat sink surface temperature of equipments'power components) Reg
+      result = node.readInputRegisters(reg, 3);
       if (result == node.ku8MBSuccess) {
-        epever.battState      = node.getResponseBuffer(0);
-        epever.chargingState  = node.getResponseBuffer(1);
-        epever.connected = true;
-      } else {
-        epever.connected = false;
-        WebSerial.println("Error reading registers at 0x" + String(REG_BATTERY_STATUS, HEX) + ": " + String(result));
-      }
+        epever.battTemp   = node.getResponseBuffer(0) / 100.0f;
+        epever.deviceTemp = node.getResponseBuffer(1) / 100.0f;
+        epever.powerTemp  = node.getResponseBuffer(2) / 100.0f;
+      } else WebSerial.println("Error reading registers at 0x" + String(reg, HEX) + ": " + String(result));
       step++;
     } break;
 
     case 4: {
-      reg = 0x330C; // Daily Energy Low Reg
-      result = node.readInputRegisters(reg, 4);
+      reg = 0x3200;   // Battery Status Reg & Charging Status Reg
+      result = node.readInputRegisters(reg, 2);
+      if (result == node.ku8MBSuccess) {
+        epever.batteryState      = node.getResponseBuffer(0);
+        epever.chargingState  = node.getResponseBuffer(1);
+        epever.connected = true;
+      } else {
+        epever.connected = false;
+        WebSerial.println("Error reading registers at 0x" + String(reg, HEX) + ": " + String(result));
+      }
+      step++;
+    } break;
+
+    case 5: {
+      reg = 0x330C; // Daily Energy Low - High Reg & Monthly Energy Low - High Reg
+      result = node.readInputRegisters(reg, 8);
       if (result == node.ku8MBSuccess) {
         epever.dailyEnergy    = ((uint32_t)node.getResponseBuffer(0) | ((uint32_t)node.getResponseBuffer(1) << 16)) / 100.0f;
         epever.monthlyEnergy  = ((uint32_t)node.getResponseBuffer(2) | ((uint32_t)node.getResponseBuffer(3) << 16)) / 100.0f;
+        epever.yearlyEnergy   = ((uint32_t)node.getResponseBuffer(4) | ((uint32_t)node.getResponseBuffer(5) << 16)) / 100.0f;
+        epever.totalEnergy    = ((uint32_t)node.getResponseBuffer(6) | ((uint32_t)node.getResponseBuffer(7) << 16)) / 100.0f;
       } else WebSerial.println("Error reading registers at 0x" + String(reg, HEX) + ": " + String(result));
       step++;
     } break;
@@ -332,24 +344,25 @@ void loop() {
     if (Firebase.ready() && epever.connected) {
       time_t now = getTimestamp();     
       
+      //Firebase.RTDB.setBool(&fbDO, "epever/modbusConnected", epever.connected);  // Modbus Connection Status
       Firebase.RTDB.setBool(&fbDO, "epever/is_online", true);  // Set device online status 
       FirebaseJson json;
       if (now > 10000) {
-        json.set("timestamp", (int)now);                // Timestamp
-        json.set("isConnected", epever.connected);      // Modbus Connection Status
-        json.set("pv/volt", epever.pvVolt);             // PV Voltage
-        json.set("pv/amps", epever.pvAmps);             // PV Current
-        json.set("pv/power", epever.pvPower);           // PV Power
-        json.set("batt/volt", epever.battVolt);         // Battery Voltage
-        json.set("batt/amps", epever.chgAmps);          // Charge Current
-        json.set("batt/power", epever.chgPower);        // Charge Power
-        json.set("batt/soc", epever.soc);               // Battery SOC
-        json.set("load/power", epever.loadPower);       // Load Power
-        json.set("load/amps", epever.loadAmps);         // Load Current
-        json.set("temp", epever.deviceTemp);            // Temperature
-        json.set("daily_kwh", epever.dailyEnergy);      // Daily Energy
-        json.set("batt_state", epever.battState);       // Battery Status
-        json.set("status_code", epever.chargingState);  // Status Code
+        json.set("timestamp",           (int)now);              // Timestamp
+        //json.set("isConnected", epever.connected);      // Modbus Connection Status
+        json.set("pv/volt",             epever.pvVolt);         // PV Voltage
+        json.set("pv/amps",             epever.pvAmps);         // PV Current
+        json.set("pv/power",            epever.pvPower);        // PV Power
+        json.set("batt/volt",           epever.battVolt);       // Battery Voltage
+        json.set("batt/amps",           epever.chgAmps);        // Charge Current
+        json.set("batt/power",          epever.chgPower);       // Charge Power
+        json.set("batt/soc",            epever.soc);            // Battery SOC
+        json.set("load/power",          epever.loadPower);      // Load Power
+        json.set("load/amps",           epever.loadAmps);       // Load Current
+        json.set("device_temperature",  epever.deviceTemp);     // Temperature
+        json.set("daily_kwh",           epever.dailyEnergy);    // Daily Energy
+        json.set("batt_state",          epever.batteryState);   // Battery Status
+        json.set("status_code",         epever.chargingState);  // Status Code
         
         Firebase.RTDB.setJSON(&fbDO, "epever/live", &json);
       }
@@ -372,12 +385,15 @@ void loop() {
       time_t now = getTimestamp();
       if (now > 10000) {
         FirebaseJson hist;
-        hist.set("hStamp",    (int)now);             // Timestamp
-        hist.set("hCCode",    epever.chargingState); // Status Code
-        hist.set("hPWatt",    epever.pvPower);       // Power
-        hist.set("hBVolt",    epever.battVolt);      // Battery
-        hist.set("hBSOC",     epever.soc);           // SOC
-        hist.set("hDayWatt",  epever.dailyEnergy);   // Daily Energy
+        hist.set("timestamp",              (int)now);             // Timestamp
+        hist.set("chargingStatusCode",     epever.chargingState); // Status Code
+        hist.set("pvPower",                epever.pvPower);       // Power
+        hist.set("batteryVoltage",         epever.battVolt);      // Battery
+        hist.set("batterySOC",             epever.soc);           // SOC
+        hist.set("dailyEnergyGenerated",   epever.dailyEnergy);   // Daily Energy
+        hist.set("monthlyEnergyGenerated", epever.monthlyEnergy); // Monthly Energy
+        hist.set("yearlyEnergyGenerated",  epever.yearlyEnergy);  // Yearly Energy
+        hist.set("totalEnergyGenerated",   epever.totalEnergy);   // Total Energy
         
         // Push adds a new unique node to the list
         Firebase.RTDB.pushJSON(&fbHist, "epever/history", &hist);

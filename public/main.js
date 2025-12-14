@@ -14,12 +14,13 @@ activityEvents.forEach(event => {
 });
 // resetIdleTimer();   // Start on load
 
-let liveChartInstance = null;
+let pvPowerChartInstance = null;
 let dayChartInstance = null;
 let livePVData = Array(30).fill(0);
 let liveLabels = Array(30).fill('');
 let fetchedLogData = [];
 let lastPacketTime = Date.now(); // To track device timeouts
+let currentHistoryDate = new Date().toISOString().split('T')[0];
 
 // --- AUTH LOGIC ---
 auth.onAuthStateChanged((user) => {
@@ -183,13 +184,6 @@ function startFirebaseListener() {
     console.log("Starting Connection...");
     firebase.database().goOnline(); // Ensure socket is open
 
-    /*/ --- TAMBAHAN LISTENER STATUS PERANGKAT ---
-    db.ref('epever/is_online').on('value', (snapshot) => {
-        const isDeviceOnline = snapshot.val(); // true atau false
-        manageStatusDot('device-conn-dot', isDeviceOnline);
-    });
-    // --- AKHIR TAMBAHAN ---*/
-    
     db.ref('epever/live').on('value', (snapshot) => {
         const data = snapshot.val();
         if (!data) return;
@@ -233,7 +227,7 @@ function updateUI(data) {
     document.getElementById('gauge-soc-text').textContent   = Math.round(data.batt.soc) + "%";
     document.getElementById('pv-voltage').textContent       = data.pv.volt.toFixed(2);
     document.getElementById('charging-current').textContent = data.batt.amps.toFixed(2);
-    document.getElementById('device-temp').textContent      = data.temp.toFixed(1);
+    document.getElementById('device-temp').textContent      = data.device_temperature.toFixed(1);
     document.getElementById('daily-energy').textContent     = data.daily_kwh.toFixed(2);
     
     const offset = 282.7 - ((data.batt.soc/100) * 282.7);
@@ -242,61 +236,6 @@ function updateUI(data) {
         ring.style.strokeDashoffset = offset; 
         ring.style.stroke = data.batt.soc < 30 ? "#ef4444" : "#22c55e"; 
     } else console.error("Gauge ring element not found");
-
-    if(liveChartInstance){
-        livePVData.push(data.pv.power); livePVData.shift(); liveChartInstance.update('none');
-    }
-
-    /*/ Cek selisih waktu sekarang vs waktu data terakhir (timestamp dari ESP32)
-    const now = Date.now() / 1000; // Detik sekarang
-    const dataTime = data.timestamp || 0; 
-    const diff = now - dataTime;
-
-    // Kalau data telat lebih dari 60 detik, anggap hang
-    if (diff > 60) {
-        manageStatusDot('device-conn-dot', false);
-    } else {
-        manageStatusDot('device-conn-dot', true);
-    }*/
-}
-
-function initCharts() {
-    const ctx = document.getElementById('liveChart');
-    if(!ctx) return;
-
-    // Create Gradient
-    const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 300);
-    gradient.addColorStop(0, 'rgba(14, 165, 233, 0.5)');
-    gradient.addColorStop(1, 'rgba(14, 165, 233, 0.0)');
-
-    liveChartInstance = new Chart(
-        ctx, { 
-            type: 'line', 
-            data: { 
-                labels: liveLabels, 
-                datasets: [{ 
-                    label: 'PV (W)', 
-                    data: livePVData, 
-                    borderwidth: 2,
-                    borderColor: '#0ea5e9', 
-                    backgroundColor: gradient, 
-                    fill: true, 
-                    tension: 0.4, // Smooth curves
-                    pointRadius: 0,
-                    pointHoverRadius: 6 }] 
-                }, 
-                options: { 
-                    responsive: true, 
-                    maintainAspectRatio: false, 
-                    plugins: { 
-                        legend: {display:false} 
-                    }, 
-                    scales: { 
-                        x: { display: false }, 
-                        y: { beginAtZero: true } 
-                    } 
-                } 
-            });
 }
 
 // --- Helper to Decode Epever Status Code ---
@@ -347,8 +286,50 @@ function getDayChartInstance(chartLabels = [], chartData = []) {
     }
 }
 
+function getPvPowerChart() {
+    const startTs = new Date(currentHistoryDate).getTime() / 1000;          // Start of selected day in seconds
+    const endTs = startTs + 86400;                                          // End of selected day in seconds
+    
+    db.ref('epever/history').orderByChild('timestamp').startAt(startTs).endAt(endTs).once('value')
+    .then(snapshot => {
+        const data = snapshot.val();
+        if (!data) return;
+
+        const logs = Object.values(data).sort((a,b) => a.timestamp - b.timestamp);
+        let chartLabels = [];
+        let chartData = [];
+        logs.forEach(log => {
+            const dateObj = new Date(log.timestamp * 1000);    // Convert to milliseconds
+            const timeStr = dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); // Format HH:MM
+            chartLabels.push(timeStr);
+            chartData.push(log.pvPower);
+        });
+
+
+        const ctxPV = document.getElementById('pvPowerChart');
+        if (!ctxPV) {
+            console.warn("Chart skipped: canvas element not found");
+            return;
+        }
+        if (!pvPowerChartInstance) {
+            try {
+                pvPowerChartInstance = new RealTimeChart('pvPowerChart', 'PV Power', 'rgb(14, 165, 233)', 'W');
+                console.log("PV Power Chart initialized");
+            } catch (e) {
+                console.error("Chart init failed:", e);
+                return;
+            }
+        }
+        const chart = pvPowerChartInstance;
+        if (chart) {
+            chart.update(chartLabels, chartData);
+        } else {
+            console.warn("Chart skipped: could not initialize canvas");
+        }   
+    });
+}
+
 // --- HISTORY LOG FETCHING ---
-let currentHistoryDate = new Date().toISOString().split('T')[0];
 
 function changeHistoryDate(days) {
     const date = new Date(currentHistoryDate);
@@ -362,13 +343,15 @@ function fetchDayLog() {
     currentHistoryDate = document.getElementById('logDateSelector').value;
     if(!currentHistoryDate) return alert("Select a date");
 
-    const startTs = new Date(currentHistoryDate).getTime() / 1000;          // Start of selected day in seconds
-    const endTs = startTs + 86400;                                          // End of selected day in seconds
+    const currentTS = new Date(currentHistoryDate).getTime() / 1000;
+    const timezoneOffset = new Date().getTimezoneOffset() * 60;
+    const startTs = currentTS + timezoneOffset;
+    const endTs = startTs + 86400;
 
     const tbody = document.getElementById('detail-table-body');
     tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center">Loading...</td></tr>';
 
-    db.ref('epever/history').orderByChild('hStamp').startAt(startTs).endAt(endTs).once('value')
+    db.ref('epever/history').orderByChild('timestamp').startAt(startTs).endAt(endTs).once('value')
     .then(snapshot => {
         const data = snapshot.val();
         fetchedLogData = []; 
@@ -383,25 +366,25 @@ function fetchDayLog() {
             return;
         }
 
-        const logs = Object.values(data).sort((a,b) => b.hStamp - a.hStamp);
+        const logs = Object.values(data).sort((a,b) => b.timestamp - a.timestamp);
 
         logs.forEach(log => {
-            const dateObj = new Date(log.hStamp * 1000);    // Convert to milliseconds
+            const dateObj = new Date(log.timestamp * 1000);    // Convert to milliseconds
             const timeStr = dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); // Format HH:MM
-            const statusStr = getStatusLabel(log.hCCode); // Decode 'hCCode' from DB
+            const statusStr = getStatusLabel(log.chargingStatusCode); // Decode 'hCCode' from DB
             const statusStrEL = `<span class="px-2 py-1 rounded text-xs font-bold bg-gray-100 ${statusStr.color}">${statusStr.text}</span>`;
             fetchedLogData.push({ time: timeStr, ...log }); 
 
             html += `<tr class="hover:bg-gray-50 dark:hover:bg-slate-800">
-                <td class="px-6 py-4">${timeStr}</td>
-                <td class="px-6 py-4">${statusStrEL}</td>
-                <td class="px-6 py-4 text-right">${log.hPWatt} W</td>
-                <td class="px-6 py-4 text-right">${log.hBVolt} V</td>
-                <td class="px-6 py-4 text-right">${log.hBSOC}%</td>
+                <td class="px-6 py-4 text-center">${timeStr}</td>
+                <td class="px-6 py-4 text-center">${statusStrEL}</td>
+                <td class="px-6 py-4 text-center">${log.pvPower} W</td>
+                <td class="px-6 py-4 text-center">${log.batteryVoltage} V</td>
+                <td class="px-6 py-4 text-center">${log.batterySOC}%</td>
             </tr>`;
 
             chartLabels.push(timeStr);
-            chartData.push(log.hPWatt);
+            chartData.push(log.pvPower);
         });
         tbody.innerHTML = html;
         chartLabels.reverse();

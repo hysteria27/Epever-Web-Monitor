@@ -41,7 +41,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 window.addEventListener('load', () => {
     lucide.createIcons();
-    initCharts();
+    //initCharts();
+    getPvPowerChart();
     // auth.signInAnonymously().catch(console.error);
     // startFirebaseListener();
     
